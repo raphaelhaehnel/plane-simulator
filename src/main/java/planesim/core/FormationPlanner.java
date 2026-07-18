@@ -16,7 +16,7 @@ import java.util.function.Supplier;
 
 /**
  * Builds the initial formation from a {@link SimulationConfig}, dispatching on which
- * {@link FormationSpec} was chosen.
+ * {@link planesim.formation.FormationSpec} was chosen.
  */
 public final class FormationPlanner {
 
