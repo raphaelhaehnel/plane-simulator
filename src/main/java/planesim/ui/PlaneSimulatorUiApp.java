@@ -1,4 +1,11 @@
-package planesim;
+package planesim.ui;
+
+import planesim.api.Plane;
+import planesim.core.SimulationConfig;
+import planesim.core.SimulationEngine;
+import planesim.formation.CircleFormation;
+import planesim.formation.FormationSpec;
+import planesim.formation.LineFormation;
 
 import javax.swing.JButton;
 import javax.swing.JComboBox;

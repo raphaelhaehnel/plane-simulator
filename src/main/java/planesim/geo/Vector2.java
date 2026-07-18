@@ -1,4 +1,4 @@
-package planesim;
+package planesim.geo;
 
 /**
  * Immutable 2D vector used for all local-frame math (meters, or meters/second for velocities).

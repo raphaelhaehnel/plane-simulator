@@ -1,4 +1,4 @@
-package planesim;
+package planesim.api;
 
 /**
  * PLACEHOLDER ONLY.

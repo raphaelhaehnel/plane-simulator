@@ -1,4 +1,11 @@
-package planesim;
+package planesim.app;
+
+import planesim.api.NetworkApi;
+import planesim.api.Plane;
+import planesim.core.SimulationConfig;
+import planesim.core.SimulationEngine;
+import planesim.formation.CircleFormation;
+import planesim.formation.LineFormation;
 
 /**
  * Example wiring for both formation types. Replace the {@link Plane}/{@link NetworkApi}

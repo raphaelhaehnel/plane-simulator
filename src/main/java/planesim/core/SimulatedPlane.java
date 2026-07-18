@@ -1,4 +1,10 @@
-package planesim;
+package planesim.core;
+
+import planesim.api.Plane;
+import planesim.behavior.FlightBehavior;
+import planesim.behavior.StepResult;
+import planesim.geo.GeoMath;
+import planesim.geo.Vector2;
 
 /**
  * Internal runtime state for one plane. Physics ("ground truth") is kept entirely in the local

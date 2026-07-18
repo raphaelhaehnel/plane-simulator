@@ -1,4 +1,7 @@
-package planesim;
+package planesim.core;
+
+import planesim.api.NetworkApi;
+import planesim.api.Plane;
 
 import java.util.List;
 import java.util.concurrent.Executors;

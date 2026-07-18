@@ -1,4 +1,6 @@
-package planesim;
+package planesim.behavior;
+
+import planesim.geo.Vector2;
 
 import java.util.Random;
 
@@ -17,13 +19,13 @@ import java.util.Random;
  * time) turns. Say the word if you'd rather the turniness be independent of the publish interval;
  * that just means scaling sigma by sqrt(dtSeconds) here.
  */
-final class CircleRandomWalkBehavior implements FlightBehavior {
+public final class CircleRandomWalkBehavior implements FlightBehavior {
 
     private static final double TURN_SIGMA_RAD = Math.toRadians(45.0);
 
     private final Random random;
 
-    CircleRandomWalkBehavior(Random random) {
+    public CircleRandomWalkBehavior(Random random) {
         this.random = random;
     }
 

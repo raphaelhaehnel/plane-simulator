@@ -1,16 +1,18 @@
-package planesim;
+package planesim.behavior;
+
+import planesim.geo.Vector2;
 
 /**
  * Flies straight toward {@code legTarget}; on reaching or overshooting it within a single tick,
  * snaps exactly onto the waypoint, reverses velocity, and swaps which end is the target — so the
  * plane shuttles back and forth between its two waypoints forever.
  */
-final class LineBounceBehavior implements FlightBehavior {
+public final class LineBounceBehavior implements FlightBehavior {
 
     private Vector2 legStart;
     private Vector2 legTarget;
 
-    LineBounceBehavior(Vector2 legStart, Vector2 legTarget) {
+    public LineBounceBehavior(Vector2 legStart, Vector2 legTarget) {
         this.legStart = legStart;
         this.legTarget = legTarget;
     }

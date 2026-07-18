@@ -1,4 +1,4 @@
-package planesim;
+package planesim.formation;
 
 /**
  * Planes arranged evenly around a circle centered on the simulation origin: 1 plane sits at the
@@ -6,7 +6,7 @@ package planesim;
  * (evenly spaced, {@code 360/planeCount} degrees apart, starting due east).
  *
  * <p>Each plane's first heading points radially outward from the center; after that, heading
- * evolves as an independent random walk per plane (see {@link CircleRandomWalkBehavior}) — there
+ * evolves as an independent random walk per plane (see {@code CircleRandomWalkBehavior}) — there
  * is no destination and no turning back, planes simply wander indefinitely.
  *
  * @param radiusMeters radius of the circle, meters

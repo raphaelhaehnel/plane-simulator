@@ -1,4 +1,4 @@
-package planesim;
+package planesim.geo;
 
 /**
  * Conversions between WGS84 lat/lon (radians) and a local flat "simulation frame" (meters,

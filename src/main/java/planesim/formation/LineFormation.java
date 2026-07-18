@@ -1,4 +1,4 @@
-package planesim;
+package planesim.formation;
 
 /**
  * Planes arranged in a straight line perpendicular to the source-&gt;destination route, evenly

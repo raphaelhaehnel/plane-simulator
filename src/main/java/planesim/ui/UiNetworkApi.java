@@ -1,9 +1,12 @@
-package planesim;
+package planesim.ui;
+
+import planesim.api.NetworkApi;
+import planesim.api.Plane;
 
 /**
  * Stands in for your real network API while it's not ready yet: instead of sending each plane
  * over the wire, it hands its state to the {@link MapPanel} for rendering. Once your real
- * NetworkApi exists, just pass that to {@link SimulationEngine#create} instead of this class —
+ * NetworkApi exists, just pass that to {@code SimulationEngine.create} instead of this class —
  * nothing else about the simulation needs to change.
  */
 final class UiNetworkApi implements NetworkApi {

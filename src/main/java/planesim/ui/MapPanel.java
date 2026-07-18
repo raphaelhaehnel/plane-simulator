@@ -1,4 +1,7 @@
-package planesim;
+package planesim.ui;
+
+import planesim.geo.GeoMath;
+import planesim.geo.Vector2;
 
 import javax.swing.JPanel;
 import java.awt.Color;

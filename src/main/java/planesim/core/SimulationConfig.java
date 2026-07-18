@@ -1,4 +1,8 @@
-package planesim;
+package planesim.core;
+
+import planesim.formation.CircleFormation;
+import planesim.formation.FormationSpec;
+import planesim.formation.LineFormation;
 
 /**
  * All the tunable parameters for one formation run.

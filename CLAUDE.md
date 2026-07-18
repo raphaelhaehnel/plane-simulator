@@ -36,12 +36,12 @@ Plain Maven project, Java 17, no external dependencies, no test framework wired 
 
 ```
 mvn compile
-mvn exec:java -Dexec.mainClass=planesim.SimulationApp        # headless console demo
-mvn exec:java -Dexec.mainClass=planesim.PlaneSimulatorUiApp  # Swing UI test harness
+mvn exec:java -Dexec.mainClass=planesim.app.SimulationApp        # headless console demo
+mvn exec:java -Dexec.mainClass=planesim.ui.PlaneSimulatorUiApp   # Swing UI test harness
 ```
 
 There is no `exec-maven-plugin` declared in `pom.xml`, so either add it first or run the compiled
-classes directly (`java -cp target/classes planesim.SimulationApp`).
+classes directly (`java -cp target/classes planesim.app.SimulationApp`).
 
 There are no tests in `src/test` yet.
 
@@ -56,6 +56,34 @@ types from the host system:
   in kinematics.
 - Delete the placeholder files and point imports at the real classes; nothing else in the design
   needs to change.
+
+## Package structure
+
+Code is split into packages along dependency direction — nothing depends "outward," so the graph
+is acyclic:
+
+- `planesim.api` — `Plane`, `NetworkApi`: the external contract. Zero dependencies on the rest of
+  the codebase, since these mock a library that lives outside this repo (Dependency Inversion:
+  everything else depends on this abstraction, never the reverse).
+- `planesim.geo` — `Vector2`, `GeoMath`: coordinate/vector math only. Zero dependencies.
+- `planesim.behavior` — `FlightBehavior`, `StepResult`, `LineBounceBehavior`,
+  `CircleRandomWalkBehavior`: the flight-behavior Strategy pattern. Depends only on `geo`. New
+  behaviors can be added here without touching `core` (Open/Closed).
+- `planesim.formation` — `FormationSpec`, `LineFormation`, `CircleFormation`: pure declarative
+  formation specs (data only, no logic, no dependencies on anything else in the project).
+- `planesim.core` — `SimulationConfig`, `SimulatedPlane`, `FormationPlanner`, `SimulationEngine`:
+  the orchestration nucleus, i.e. the project's one real purpose (see above). Depends on `api`,
+  `geo`, `behavior`, and `formation`.
+- `planesim.app` — `SimulationApp`: headless console demo. Depends on `core`, `formation`, `api`.
+- `planesim.ui` — `PlaneSimulatorUiApp`, `MapPanel`, `UiNetworkApi`, `PlaneSnapshot`: Swing test
+  harness. Depends on `core`, `formation`, `api`, `geo`.
+
+Because Java visibility doesn't reach across packages, a few types that used to be package-private
+when everything lived in one package are now `public` purely so `core` can consume them from
+`behavior` (`FlightBehavior`, `StepResult`, `LineBounceBehavior`, `CircleRandomWalkBehavior`).
+Types only ever constructed by a class in their own package kept their package-private visibility:
+`SimulatedPlane` (built by `FormationPlanner`, driven by `SimulationEngine`, both in `core`) and
+`MapPanel`/`UiNetworkApi`/`PlaneSnapshot` (all only used by `PlaneSimulatorUiApp`, all in `ui`).
 
 ## Architecture
 
@@ -107,10 +135,12 @@ meter/km-scale and would be sub-pixel on any real map projection.
 - Angles in the public data model (`Plane`, `SimulationConfig`, `LineFormation`, `CircleFormation`)
   are radians; the UI form fields are the one place degrees are accepted from a human and
   converted at the boundary (`Math.toRadians`/`toDegrees`).
-- Package-private (no modifier) visibility is used deliberately for internals that only the
-  engine/formation-planner should construct (`SimulatedPlane`, `FlightBehavior` implementations,
-  `StepResult`, `MapPanel`, `UiNetworkApi`) — keep new internal-only types package-private rather
-  than defaulting to `public`.
+- Package-private (no modifier) visibility is used deliberately for internals only constructed by
+  another class in the same package (`SimulatedPlane`, `MapPanel`, `UiNetworkApi`) — keep new
+  same-package-only types package-private rather than defaulting to `public`. Types that must be
+  constructed from a different package (e.g. `core` building `behavior` implementations) have to
+  be `public` — that's a Java visibility constraint, not license to make everything public; see
+  "Package structure" above for which types are public out of necessity vs. by design.
 - Records (`Vector2`, `StepResult`, `PlaneSnapshot`, `SimulationConfig`, `LineFormation`,
   `CircleFormation`) are used for immutable value types; compact constructors validate invariants
   (e.g. `SimulationConfig`, `LineFormation`, `CircleFormation` reject negative/non-positive values).

@@ -1,4 +1,13 @@
-package planesim;
+package planesim.core;
+
+import planesim.api.Plane;
+import planesim.behavior.CircleRandomWalkBehavior;
+import planesim.behavior.FlightBehavior;
+import planesim.behavior.LineBounceBehavior;
+import planesim.formation.CircleFormation;
+import planesim.formation.LineFormation;
+import planesim.geo.GeoMath;
+import planesim.geo.Vector2;
 
 import java.util.ArrayList;
 import java.util.List;
