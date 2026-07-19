@@ -4,6 +4,8 @@ import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import planesim.server.dto.ErrorResponse;
 
 import java.io.IOException;
@@ -18,9 +20,11 @@ import java.nio.charset.StandardCharsets;
 abstract class AbstractJsonHandler implements HttpHandler {
 
     private static final Gson GSON = new Gson();
+    private static final Logger log = LogManager.getLogger(AbstractJsonHandler.class);
 
     @Override
     public final void handle(HttpExchange exchange) throws IOException {
+        log.info("Received request: {} {}", exchange.getRequestMethod(), exchange.getRequestURI());
         try {
             if (!method().equalsIgnoreCase(exchange.getRequestMethod())) {
                 writeJson(exchange, 405, new ErrorResponse("Method not allowed, expected " + method()));

@@ -1,5 +1,7 @@
 package planesim.core;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import planesim.api.NetworkApi;
 import planesim.api.Plane;
 
@@ -29,6 +31,8 @@ import java.util.function.Supplier;
  * cancelled chain is still running, causing two concurrent executions of this engine's own tick).
  */
 public final class SimulationEngine {
+
+    private static final Logger log = LogManager.getLogger(SimulationEngine.class);
 
     private final List<SimulatedPlane> formation;
     private final NetworkApi networkApi;
@@ -83,7 +87,10 @@ public final class SimulationEngine {
             // 1) Send every plane's current state.
             for (SimulatedPlane simulatedPlane : formation) {
                 simulatedPlane.writeToPlane();
-                networkApi.send(simulatedPlane.plane());
+                Plane plane = simulatedPlane.plane();
+                networkApi.send(plane);
+                log.info("Sent plane to NetworkApi: lat={}, lon={}, alt={}, vx={}, vy={}, heading={}",
+                        plane.latitude, plane.longitude, plane.altitude, plane.vx, plane.vy, plane.heading);
             }
 
             // 2) Advance every plane for the next tick (turning it around if it reached a waypoint).

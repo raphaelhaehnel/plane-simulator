@@ -37,8 +37,8 @@ meters (`Vector2`, the flat frame) exist only as an internal computation detail 
 
 ## Build / run
 
-Maven project, Java 17, one dependency (Gson, for the JSON HTTP API), `exec-maven-plugin` wired up,
-no test framework yet.
+Maven project, Java 17, dependencies are Gson (JSON HTTP API) and Log4j2 (console logging),
+`exec-maven-plugin` wired up, no test framework yet.
 
 ```
 mvn compile
@@ -129,9 +129,10 @@ regional/continental scale, not for intercontinental great-circle distances.
 **Tick loop, on a shared pool.** `SimulationEngine` does not own a thread: it's handed a
 `ScheduledExecutorService` (typically shared across many engines/scenarios) via `create(...)`, and
 every `publishIntervalMs` does two full passes over its own formation: (1) send every plane's
-*current* state via `networkApi.send()`, then (2) advance every plane to its next-tick
-position/velocity. This "send, then update" order means what's published is always the position as
-of that tick, not one tick ahead. `SimulatedPlane` and the `FlightBehavior` implementations are
+*current* state via `networkApi.send()` (logging one Log4j2 INFO line per plane sent), then
+(2) advance every plane to its next-tick position/velocity. This "send, then update" order means
+what's published is always the position as of that tick, not one tick ahead. `SimulatedPlane` and
+the `FlightBehavior` implementations are
 deliberately not thread-safe / hold no locks — this is still safe with a shared pool because
 `ScheduledThreadPoolExecutor` guarantees one task's successive executions never overlap (a late run
 delays the next rather than running concurrently), and different engines never share
@@ -184,8 +185,10 @@ the initial list of `SimulatedPlane`s with their starting positions, velocities,
 `POST /createScenario`, `GET /getScenarios`, `POST /deleteScenario`, `POST /start`, `POST /pause`,
 `POST /stopAll`) over a `ScenarioManager`, on top of one shared `Executors.newScheduledThreadPool(...)` for scenario
 ticking, separate from the pool that serves incoming HTTP requests. `AbstractJsonHandler`
-centralizes method checking, JSON body (de)serialization (Gson), and mapping exceptions to status
-codes: `400` for `BadRequestException`/`IllegalArgumentException`/`NullPointerException`/
+centralizes method checking, a Log4j2 INFO log line for every request received (method + URI,
+logged unconditionally before dispatch, so it fires even for requests that end up 4xx/5xx), JSON
+body (de)serialization (Gson), and mapping exceptions to status codes: `400` for
+`BadRequestException`/`IllegalArgumentException`/`NullPointerException`/
 `JsonSyntaxException` (this is how `SimulationConfig`/`LineFormation`/`CircleFormation`'s own
 compact-constructor validation surfaces as a 400 without `RequestMapper` duplicating those checks),
 `404` for an unknown scenario id, `405` for the wrong verb, `500` for anything else. Coordinates in
@@ -206,6 +209,11 @@ projection. Poll-thread UI mutations are wrapped in `SwingUtilities.invokeLater`
 
 ## Conventions worth preserving
 
+- Log4j2 (`LogManager.getLogger(...)`, console appender only, configured in
+  `src/main/resources/log4j2.xml`) is used for **backend logging only** — `planesim.core`
+  (plane-sent-to-`NetworkApi` events) and `planesim.server` (HTTP requests received). Nothing in
+  `planesim.ui` logs anything; keep it that way, the UI is view-only scaffolding, not a place to
+  grow observability.
 - Angles in the public data model (`Plane`, `SimulationConfig`, `LineFormation`, `CircleFormation`)
   are radians, all the way out through the JSON HTTP API — there is currently no place in this
   codebase that accepts degrees from a human (the old Swing config form that used to convert
