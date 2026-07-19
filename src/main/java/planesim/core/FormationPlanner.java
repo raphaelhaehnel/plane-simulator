@@ -32,7 +32,7 @@ public final class FormationPlanner {
      * @param objectFactory supplies one new externally-provided object instance per simulated
      *                      object (e.g. {@code Plane::new}, or a lambda that also assigns an id)
      */
-    static <T> List<SimulatedObject<T>> buildFormation(SimulationConfig config, MovementStyle movementStyle,
+    static <T> List<SimulatedEntity<T>> buildFormation(SimulationConfig config, MovementStyle movementStyle,
                                                          Supplier<T> objectFactory, ObjectWriter<T> writer) {
         if (config.formation() instanceof LineFormation line) {
             return buildLineFormation(config, line, movementStyle, objectFactory, writer);
@@ -51,7 +51,7 @@ public final class FormationPlanner {
      * own parallel line rather than converging onto a single destination point; a
      * {@link MovementStyle#STATIC} object just stays at its source point.
      */
-    private static <T> List<SimulatedObject<T>> buildLineFormation(SimulationConfig config, LineFormation line,
+    private static <T> List<SimulatedEntity<T>> buildLineFormation(SimulationConfig config, LineFormation line,
                                                                      MovementStyle movementStyle,
                                                                      Supplier<T> objectFactory, ObjectWriter<T> writer) {
         double originLatRad = config.originLatRad();
@@ -64,7 +64,7 @@ public final class FormationPlanner {
         Vector2 perpendicularAxis = routeDirection.perpendicular();
 
         int n = config.objectCount();
-        List<SimulatedObject<T>> formation = new ArrayList<>(n);
+        List<SimulatedEntity<T>> formation = new ArrayList<>(n);
 
         for (int i = 0; i < n; i++) {
             // Centered arrangement: e.g. for n=5 the offset indices are -2,-1,0,1,2.
@@ -97,14 +97,14 @@ public final class FormationPlanner {
      * object then evolves via an independent random walk (see {@link CircleRandomWalkBehavior}), a
      * {@link MovementStyle#STATIC} object just stays put.
      */
-    private static <T> List<SimulatedObject<T>> buildCircleFormation(SimulationConfig config, CircleFormation circle,
+    private static <T> List<SimulatedEntity<T>> buildCircleFormation(SimulationConfig config, CircleFormation circle,
                                                                        MovementStyle movementStyle,
                                                                        Supplier<T> objectFactory, ObjectWriter<T> writer) {
         double originLatRad = config.originLatRad();
         double originLonRad = config.originLonRad();
 
         int n = config.objectCount();
-        List<SimulatedObject<T>> formation = new ArrayList<>(n);
+        List<SimulatedEntity<T>> formation = new ArrayList<>(n);
         // Shared RNG is fine: the engine only ever calls into this from a single thread, and
         // sequential draws from one Random give every object an independent turn sequence anyway.
         Random random = new Random();

@@ -14,4 +14,9 @@ public class Radar {
     public double altitude;
     public double latitude;   // radians
     public double longitude;  // radians
+
+    @Override
+    public String toString() {
+        return "lat=" + latitude + ", lon=" + longitude + ", alt=" + altitude;
+    }
 }

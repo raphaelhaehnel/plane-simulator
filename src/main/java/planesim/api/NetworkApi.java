@@ -9,4 +9,5 @@ package planesim.api;
 public interface NetworkApi {
     void send(Plane plane);
     void send(Radar radar);
+    void send(Weather weather);
 }

@@ -1,0 +1,188 @@
+{
+  "info": {
+    "_postman_id": "206c8314-1014-457c-bb76-0941a8aaac35",
+    "name": "Plane Simulator",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "12888246"
+  },
+  "item": [
+    {
+      "name": "create scenario circle",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"type\": \"PLANE\",\r\n  \"amount\": 5,\r\n  \"originLatRad\": 0.3575,\r\n  \"originLonRad\": 0.9838,\r\n  \"sendInterval\": 500,\r\n  \"formation\": {\r\n    \"type\": \"CIRCLE\",\r\n    \"destLatRad\": 0.4300,\r\n    \"destLonRad\": 1.0500,\r\n    \"spacingMeters\": 2000,\r\n    \"radiusMeters\": 1000\r\n  }\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:8080/createScenario",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "createScenario"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "create scenario line",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"type\": \"PLANE\",\r\n  \"amount\": 5,\r\n  \"originLatRad\": 0.3575,\r\n  \"originLonRad\": 0.9838,\r\n  \"sendInterval\": 500,\r\n  \"formation\": {\r\n    \"type\": \"LINE\",\r\n    \"destLatRad\": 0.4300,\r\n    \"destLonRad\": 1.0500,\r\n    \"spacingMeters\": 2000\r\n  }\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:8080/createScenario",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "createScenario"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "get scenarios",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8080/getScenarios",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "getScenarios"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "start scenario",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"id\": \"5c4879ab-5170-4c05-a288-f8cdf7dbda0f\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:8080/start",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "start"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "pause scenario",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"id\": \"5c4879ab-5170-4c05-a288-f8cdf7dbda0f\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:8080/pause",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "pause"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "delete scenario",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"id\": \"174a9c7c-93a5-4f42-b057-c8e95d705219\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:8080/deleteScenario",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "deleteScenario"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "stop all",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8080/stopAll",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "stopAll"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}

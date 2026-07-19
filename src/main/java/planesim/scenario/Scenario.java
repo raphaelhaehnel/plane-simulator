@@ -1,6 +1,6 @@
 package planesim.scenario;
 
-import planesim.core.SimulationConfig;
+import planesim.core.ScenarioConfig;
 import planesim.core.SimulationEngine;
 
 import java.util.List;
@@ -10,19 +10,21 @@ import java.util.List;
  * Only {@link ScenarioManager} constructs one or touches its engine/status directly — everything
  * else (e.g. the HTTP layer) only ever reads through the public accessors. The engine's object
  * type parameter is erased here (wildcard) since nothing outside {@code ScenarioManager} needs to
- * know whether this scenario simulates planes or radars beyond {@link #type()}.
+ * know exactly which object type this scenario simulates beyond {@link #type()}. {@code config} is
+ * a {@link ScenarioConfig} rather than a concrete type since a scenario may be geographic ({@code
+ * SimulationConfig}, e.g. plane/radar) or not ({@code ValueSimulationConfig}, e.g. weather).
  */
 public final class Scenario {
 
     private final String id;
     private final ScenarioType type;
-    private final SimulationConfig config;
+    private final ScenarioConfig config;
     private final SimulationEngine<?> engine;
     private final ScenarioNetworkApi networkApi;
 
     private volatile ScenarioStatus status = ScenarioStatus.CREATED;
 
-    Scenario(String id, ScenarioType type, SimulationConfig config, SimulationEngine<?> engine,
+    Scenario(String id, ScenarioType type, ScenarioConfig config, SimulationEngine<?> engine,
              ScenarioNetworkApi networkApi) {
         this.id = id;
         this.type = type;
@@ -39,7 +41,7 @@ public final class Scenario {
         return type;
     }
 
-    public SimulationConfig config() {
+    public ScenarioConfig config() {
         return config;
     }
 
@@ -47,9 +49,14 @@ public final class Scenario {
         return status;
     }
 
-    /** The latest known state of every object in this scenario, ordered by index. */
-    public List<ObjectLiveState> liveSnapshot() {
-        return networkApi.snapshot();
+    /** The latest known state of every geographic object (plane/radar/...) in this scenario, ordered by index. */
+    public List<GeoLiveState> liveGeoSnapshot() {
+        return networkApi.geoSnapshot();
+    }
+
+    /** The latest known reading of every non-geographic object (weather/...) in this scenario, ordered by index. */
+    public List<NonGeoLiveState> liveNonGeoSnapshot() {
+        return networkApi.nonGeoSnapshot();
     }
 
     SimulationEngine<?> engine() {

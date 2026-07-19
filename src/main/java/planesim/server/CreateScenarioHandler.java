@@ -2,7 +2,7 @@ package planesim.server;
 
 import com.google.gson.Gson;
 import com.sun.net.httpserver.HttpExchange;
-import planesim.core.SimulationConfig;
+import planesim.core.ScenarioConfig;
 import planesim.scenario.Scenario;
 import planesim.scenario.ScenarioManager;
 import planesim.scenario.ScenarioType;
@@ -29,7 +29,7 @@ final class CreateScenarioHandler extends AbstractJsonHandler {
     void handleRequest(HttpExchange exchange, Gson gson) throws IOException {
         CreateScenarioRequest request = readBody(exchange, gson, CreateScenarioRequest.class);
         ScenarioType type = RequestMapper.toScenarioType(request.type);
-        SimulationConfig config = RequestMapper.toSimulationConfig(request);
+        ScenarioConfig config = RequestMapper.toScenarioConfig(type, request);
         Scenario scenario = manager.createScenario(type, config);
         writeJson(exchange, 200, new CreateScenarioResponse(scenario.id()));
     }

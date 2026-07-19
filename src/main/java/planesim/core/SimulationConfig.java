@@ -23,7 +23,7 @@ public record SimulationConfig(
         double altitudeMeters,
         long publishIntervalMs,
         FormationSpec formation
-) {
+) implements ScenarioConfig {
     public SimulationConfig {
         if (objectCount <= 0) {
             throw new IllegalArgumentException("objectCount must be positive");

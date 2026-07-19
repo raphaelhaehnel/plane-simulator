@@ -2,10 +2,14 @@ package planesim.scenario;
 
 import planesim.api.Plane;
 import planesim.api.Radar;
+import planesim.api.Weather;
 import planesim.core.MovementStyle;
 import planesim.core.ObjectWriters;
+import planesim.core.ScenarioConfig;
 import planesim.core.SimulationConfig;
 import planesim.core.SimulationEngine;
+import planesim.core.ValueGenerators;
+import planesim.core.ValueSimulationConfig;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,16 +35,20 @@ public final class ScenarioManager {
     /**
      * Creates and registers a new scenario in {@link ScenarioStatus#CREATED} state. Does not start
      * it. Dispatches on {@code type} to pick the right external object class, its {@link
-     * planesim.core.ObjectWriter}, and its {@link MovementStyle} (planes fly, radars stay put).
+     * planesim.core.ObjectWriter}/{@link planesim.core.ValueGenerator}, and (for geographic types)
+     * its {@link MovementStyle} (planes fly, radars stay put). {@code config} must be the matching
+     * {@link ScenarioConfig} kind for {@code type} — {@link RequestMapper} guarantees that.
      */
-    public Scenario createScenario(ScenarioType type, SimulationConfig config) {
+    public Scenario createScenario(ScenarioType type, ScenarioConfig config) {
         String id = UUID.randomUUID().toString();
         ScenarioNetworkApi networkApi = new ScenarioNetworkApi();
         SimulationEngine<?> engine = switch (type) {
-            case PLANE -> SimulationEngine.<Plane>create(config, MovementStyle.MOBILE,
+            case PLANE -> SimulationEngine.<Plane>create((SimulationConfig) config, MovementStyle.MOBILE,
                     networkApi::send, Plane::new, ObjectWriters.PLANE, sharedScheduler);
-            case RADAR -> SimulationEngine.<Radar>create(config, MovementStyle.STATIC,
+            case RADAR -> SimulationEngine.<Radar>create((SimulationConfig) config, MovementStyle.STATIC,
                     networkApi::send, Radar::new, ObjectWriters.RADAR, sharedScheduler);
+            case WEATHER -> SimulationEngine.<Weather>createValueEngine((ValueSimulationConfig) config,
+                    networkApi::send, Weather::new, ValueGenerators.WEATHER, sharedScheduler);
         };
         Scenario scenario = new Scenario(id, type, config, engine, networkApi);
         scenarios.put(id, scenario);

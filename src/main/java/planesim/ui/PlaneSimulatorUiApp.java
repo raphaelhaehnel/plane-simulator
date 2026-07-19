@@ -1,6 +1,6 @@
 package planesim.ui;
 
-import planesim.server.dto.ObjectStateDto;
+import planesim.server.dto.GeoStateDto;
 import planesim.server.dto.ScenarioDto;
 
 import javax.swing.JFrame;
@@ -59,7 +59,10 @@ public final class PlaneSimulatorUiApp extends JFrame {
             List<ScenarioDto> scenarios = pollingClient.fetchScenarios();
             Map<String, PlaneSnapshot> snapshots = new HashMap<>();
             for (ScenarioDto scenario : scenarios) {
-                for (ObjectStateDto object : scenario.objects) {
+                if (scenario.geoObjects == null) {
+                    continue; // non-geographic scenario (e.g. weather) - nothing to plot
+                }
+                for (GeoStateDto object : scenario.geoObjects) {
                     snapshots.put(scenario.id + "#" + object.index,
                             new PlaneSnapshot(object.latRad, object.lonRad, object.headingDeg));
                 }

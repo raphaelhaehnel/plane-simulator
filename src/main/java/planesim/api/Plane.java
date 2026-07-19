@@ -16,4 +16,10 @@ public class Plane {
     public double vx;         // m/s, east component
     public double vy;         // m/s, north component
     public double heading;    // degrees, [0, 360), UI-only, not used in kinematics
+
+    @Override
+    public String toString() {
+        return "lat=" + latitude + ", lon=" + longitude + ", alt=" + altitude
+                + ", vx=" + vx + ", vy=" + vy + ", heading=" + heading;
+    }
 }

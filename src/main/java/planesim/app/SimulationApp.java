@@ -3,10 +3,13 @@ package planesim.app;
 import planesim.api.NetworkApi;
 import planesim.api.Plane;
 import planesim.api.Radar;
+import planesim.api.Weather;
 import planesim.core.MovementStyle;
 import planesim.core.ObjectWriters;
 import planesim.core.SimulationConfig;
 import planesim.core.SimulationEngine;
+import planesim.core.ValueGenerators;
+import planesim.core.ValueSimulationConfig;
 import planesim.formation.CircleFormation;
 import planesim.formation.LineFormation;
 
@@ -14,9 +17,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
 /**
- * Example wiring for both formation types and both simulated object types. Replace the
- * {@link Plane}/{@link Radar}/{@link NetworkApi} placeholders with your real library imports and
- * this is basically all the setup code you need.
+ * Example wiring for both formation types and every simulated object type. Replace the
+ * {@link Plane}/{@link Radar}/{@link Weather}/{@link NetworkApi} placeholders with your real
+ * library imports and this is basically all the setup code you need.
  */
 public final class SimulationApp {
 
@@ -31,12 +34,19 @@ public final class SimulationApp {
         public void send(Radar radar) {
             System.out.printf("radar lat=%.6f lon=%.6f alt=%.1f%n", radar.latitude, radar.longitude, radar.altitude);
         }
+
+        @Override
+        public void send(Weather weather) {
+            System.out.printf("weather windVelocity=%.2f temperature=%.1f isSunny=%b%n",
+                    weather.windVelocity, weather.temperature, weather.isSunny);
+        }
     };
 
     public static void main(String[] args) throws InterruptedException {
         runLineExample();
         runCircleExample();
         runRadarExample();
+        runWeatherExample();
     }
 
     private static void runLineExample() throws InterruptedException {
@@ -76,6 +86,15 @@ public final class SimulationApp {
         runRadarsFor(config, 3_000);
     }
 
+    /** Weather has no coordinates at all - no origin, no formation, just N independent readings. */
+    private static void runWeatherExample() throws InterruptedException {
+        ValueSimulationConfig config = new ValueSimulationConfig(
+                2,     // number of independent weather readings
+                1000   // publish interval, ms
+        );
+        runWeatherFor(config, 3_000);
+    }
+
     private static void runPlanesFor(SimulationConfig config, long millis) throws InterruptedException {
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
         SimulationEngine<Plane> engine = SimulationEngine.create(config, MovementStyle.MOBILE,
@@ -90,6 +109,16 @@ public final class SimulationApp {
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
         SimulationEngine<Radar> engine = SimulationEngine.create(config, MovementStyle.STATIC,
                 NETWORK_API::send, Radar::new, ObjectWriters.RADAR, scheduler);
+        engine.start();
+        Thread.sleep(millis);
+        engine.pause();
+        scheduler.shutdown();
+    }
+
+    private static void runWeatherFor(ValueSimulationConfig config, long millis) throws InterruptedException {
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        SimulationEngine<Weather> engine = SimulationEngine.createValueEngine(config,
+                NETWORK_API::send, Weather::new, ValueGenerators.WEATHER, scheduler);
         engine.start();
         Thread.sleep(millis);
         engine.pause();
