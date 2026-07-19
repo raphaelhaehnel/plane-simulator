@@ -4,8 +4,8 @@ import planesim.api.NetworkApi;
 import planesim.api.Plane;
 
 import java.util.List;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
@@ -15,21 +15,34 @@ import java.util.function.Supplier;
  * "send, then update" order from the spec, so what's sent is always this tick's position, and
  * movement is applied for next tick).
  *
- * <p>All planes are driven from a single scheduler thread rather than one thread per plane —
- * simpler, no synchronization needed, and perfectly adequate unless you're simulating an
- * unusually large number of planes.
+ * <p>The engine does not own a thread: it's handed a {@link ScheduledExecutorService} (typically
+ * shared across many engines/scenarios) and only tracks its own {@link ScheduledFuture}, so
+ * {@link #pause()} cancels just this engine's task without touching the shared pool. Sharing one
+ * pool across many engines is safe because {@code ScheduledThreadPoolExecutor} guarantees a given
+ * periodic task's successive executions never overlap (a late run delays the next rather than
+ * running concurrently), so one engine's own ticks never overlap regardless of pool size — and
+ * different engines never share {@link SimulatedPlane} objects (each {@link #create} call builds
+ * its own private formation list), so concurrent ticks from different engines on different pool
+ * threads never touch shared state. {@code start()}/{@code pause()}/{@code tick()} are
+ * synchronized on this engine's own monitor purely to serialize the pause-then-immediately-resume
+ * handoff (otherwise a new scheduled chain could start while an orphaned in-flight tick from the
+ * cancelled chain is still running, causing two concurrent executions of this engine's own tick).
  */
 public final class SimulationEngine {
 
     private final List<SimulatedPlane> formation;
     private final NetworkApi networkApi;
     private final long publishIntervalMs;
-    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private final ScheduledExecutorService scheduler;
 
-    private SimulationEngine(List<SimulatedPlane> formation, NetworkApi networkApi, long publishIntervalMs) {
+    private ScheduledFuture<?> tickHandle;
+
+    private SimulationEngine(List<SimulatedPlane> formation, NetworkApi networkApi, long publishIntervalMs,
+                              ScheduledExecutorService scheduler) {
         this.formation = formation;
         this.networkApi = networkApi;
         this.publishIntervalMs = publishIntervalMs;
+        this.scheduler = scheduler;
     }
 
     /**
@@ -37,22 +50,33 @@ public final class SimulationEngine {
      *
      * @param planeFactory supplies one new externally-provided Plane instance per simulated
      *                     plane, e.g. {@code Plane::new}
+     * @param scheduler    the (possibly shared) executor this engine's ticks will run on; the
+     *                     engine never shuts it down — that's the caller's responsibility
      */
-    public static SimulationEngine create(SimulationConfig config, NetworkApi networkApi, Supplier<Plane> planeFactory) {
+    public static SimulationEngine create(SimulationConfig config, NetworkApi networkApi,
+                                           Supplier<Plane> planeFactory, ScheduledExecutorService scheduler) {
         List<SimulatedPlane> formation = FormationPlanner.buildFormation(config, planeFactory);
-        return new SimulationEngine(formation, networkApi, config.publishIntervalMs());
+        return new SimulationEngine(formation, networkApi, config.publishIntervalMs(), scheduler);
     }
 
-    /** Starts ticking at the configured publish interval. Call {@link #stop()} to end it. */
-    public void start() {
-        scheduler.scheduleAtFixedRate(this::tick, 0, publishIntervalMs, TimeUnit.MILLISECONDS);
+    /** Starts ticking, or resumes a paused engine from its current plane state. Idempotent while already running. */
+    public synchronized void start() {
+        if (tickHandle != null) {
+            return;
+        }
+        tickHandle = scheduler.scheduleAtFixedRate(this::tick, 0, publishIntervalMs, TimeUnit.MILLISECONDS);
     }
 
-    public void stop() {
-        scheduler.shutdown();
+    /** Cancels ticking without touching the shared executor or losing plane state. Idempotent. */
+    public synchronized void pause() {
+        if (tickHandle == null) {
+            return;
+        }
+        tickHandle.cancel(false);
+        tickHandle = null;
     }
 
-    private void tick() {
+    private synchronized void tick() {
         try {
             double dtSeconds = publishIntervalMs / 1000.0;
 

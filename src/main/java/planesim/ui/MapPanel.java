@@ -14,8 +14,6 @@ import java.awt.RenderingHints;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Path2D;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -27,6 +25,10 @@ import java.util.function.ToDoubleFunction;
  * whichever planes are currently tracked, using the same local-meter projection the simulation
  * itself uses ({@link GeoMath}), so circles stay circular and lines stay straight at any zoom
  * level. A light distance grid stands in for lat/lon graticules.
+ *
+ * <p>Planes are keyed by a caller-supplied String id (e.g. {@code scenarioId + "#" + planeIndex})
+ * rather than object identity, since plane data now arrives over HTTP as parsed JSON with no
+ * shared object identity across the process boundary.
  */
 final class MapPanel extends JPanel {
 
@@ -46,24 +48,22 @@ final class MapPanel extends JPanel {
 
     private static final Path2D.Double PLANE_SHAPE = buildPlaneShape();
 
-    private final Map<Object, PlaneSnapshot> planesById =
-            Collections.synchronizedMap(new IdentityHashMap<>());
+    private volatile Map<String, PlaneSnapshot> planesById = Map.of();
 
     MapPanel() {
         setBackground(BACKGROUND);
         setPreferredSize(new Dimension(900, 600));
     }
 
-    /** Called from the simulation thread (via a NetworkApi implementation) whenever a plane is "sent". */
-    void updatePlane(Object planeId, double latRad, double lonRad, double headingDeg) {
-        planesById.put(planeId, new PlaneSnapshot(latRad, lonRad, headingDeg));
+    /** Called once per poll cycle with the complete current set of planes across all scenarios. */
+    void replaceAll(Map<String, PlaneSnapshot> snapshots) {
+        this.planesById = Map.copyOf(snapshots);
         repaint();
     }
 
-    /** Clears all tracked planes, e.g. before starting a new run. */
+    /** Clears all tracked planes. */
     void clear() {
-        planesById.clear();
-        repaint();
+        replaceAll(Map.of());
     }
 
     @Override
@@ -77,10 +77,7 @@ final class MapPanel extends JPanel {
 
     /** Drawing logic factored out of paintComponent so it can also be exercised off-screen (e.g. in tests). */
     void render(Graphics2D g2, int width, int height) {
-        List<PlaneSnapshot> snapshot;
-        synchronized (planesById) {
-            snapshot = List.copyOf(planesById.values());
-        }
+        List<PlaneSnapshot> snapshot = List.copyOf(planesById.values());
 
         if (snapshot.isEmpty()) {
             drawEmptyState(g2, width, height);
@@ -164,7 +161,7 @@ final class MapPanel extends JPanel {
     private void drawEmptyState(Graphics2D g2, int width, int height) {
         g2.setColor(AXIS_LINE);
         g2.setFont(g2.getFont().deriveFont(Font.PLAIN, 14f));
-        String msg = "Press Start to run a simulation";
+        String msg = "No running scenarios";
         FontMetrics fm = g2.getFontMetrics();
         int x = (width - fm.stringWidth(msg)) / 2;
         int y = height / 2;

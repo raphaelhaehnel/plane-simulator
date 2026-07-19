@@ -1,157 +1,95 @@
 package planesim.ui;
 
-import planesim.api.Plane;
-import planesim.core.SimulationConfig;
-import planesim.core.SimulationEngine;
-import planesim.formation.CircleFormation;
-import planesim.formation.FormationSpec;
-import planesim.formation.LineFormation;
+import planesim.server.dto.PlaneStateDto;
+import planesim.server.dto.ScenarioDto;
 
-import javax.swing.JButton;
-import javax.swing.JComboBox;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
-import javax.swing.JPanel;
-import javax.swing.JSpinner;
-import javax.swing.JTextField;
-import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
-import java.awt.FlowLayout;
+import java.net.ConnectException;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
- * Standalone Swing test harness: configure a formation, hit Start, and watch the planes move on
- * a local map — no real network API needed yet. When your real NetworkApi is ready, swap
- * {@link UiNetworkApi} for it in {@link #onStart()}; everything else (config, engine, formation
- * logic) stays exactly as-is.
+ * View-only dashboard: polls {@code GET /getScenarios} on the running {@link
+ * planesim.server.SimulationServerApp} and renders every scenario's planes together on one map.
+ * There is no way to create/start/pause/delete a scenario from here — that's the whole point of
+ * going through the HTTP API instead of driving a {@code SimulationEngine} in-process, the way the
+ * old form-and-buttons version of this class used to.
  */
 public final class PlaneSimulatorUiApp extends JFrame {
 
+    private static final long POLL_INTERVAL_MS = 1000;
+
     private final MapPanel mapPanel = new MapPanel();
+    private final JLabel statusLabel = new JLabel("Connecting...");
+    private final ScenarioPollingClient pollingClient;
+    private final String serverUrl;
+    private final ScheduledExecutorService pollExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "scenario-poll");
+        t.setDaemon(true);
+        return t;
+    });
 
-    private final JComboBox<String> formationTypeCombo = new JComboBox<>(new String[]{"Line", "Circle"});
-    private final JSpinner planeCountSpinner = new JSpinner(new SpinnerNumberModel(5, 1, 100, 1));
-    private final JTextField speedField = new JTextField("230", 5);
-    private final JTextField altitudeField = new JTextField("10000", 6);
-    private final JTextField publishIntervalField = new JTextField("500", 5);
-    private final JTextField originLatField = new JTextField("20.48", 6);
-    private final JTextField originLonField = new JTextField("56.36", 6);
-    private final JTextField destLatField = new JTextField("24.60", 6);
-    private final JTextField destLonField = new JTextField("60.16", 6);
-    private final JTextField spacingField = new JTextField("2000", 5);
-    private final JTextField radiusField = new JTextField("5000", 5);
-    private final JButton startButton = new JButton("Start");
-    private final JButton stopButton = new JButton("Stop");
+    private boolean lastPollFailed;
 
-    private SimulationEngine currentEngine;
-
-    private PlaneSimulatorUiApp() {
-        super("Plane Simulator - Test UI");
+    private PlaneSimulatorUiApp(String serverUrl) {
+        super("Plane Simulator - Live View");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        this.serverUrl = serverUrl;
+        this.pollingClient = new ScenarioPollingClient(serverUrl);
+
         setLayout(new BorderLayout());
-
-        add(buildControlPanel(), BorderLayout.NORTH);
+        add(statusLabel, BorderLayout.NORTH);
         add(mapPanel, BorderLayout.CENTER);
-
-        stopButton.setEnabled(false);
-        startButton.addActionListener(e -> onStart());
-        stopButton.addActionListener(e -> onStop());
 
         pack();
         setLocationRelativeTo(null);
+
+        pollExecutor.scheduleAtFixedRate(this::poll, 0, POLL_INTERVAL_MS, TimeUnit.MILLISECONDS);
     }
 
-    private JPanel buildControlPanel() {
-        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
-        panel.add(new JLabel("Formation:"));
-        panel.add(formationTypeCombo);
-        panel.add(new JLabel("Planes:"));
-        panel.add(planeCountSpinner);
-        panel.add(new JLabel("Speed m/s:"));
-        panel.add(speedField);
-        panel.add(new JLabel("Altitude m:"));
-        panel.add(altitudeField);
-        panel.add(new JLabel("Publish ms:"));
-        panel.add(publishIntervalField);
-        panel.add(new JLabel("Origin lat/lon (deg):"));
-        panel.add(originLatField);
-        panel.add(originLonField);
-        panel.add(new JLabel("[Line] Dest lat/lon (deg):"));
-        panel.add(destLatField);
-        panel.add(destLonField);
-        panel.add(new JLabel("[Line] Spacing m:"));
-        panel.add(spacingField);
-        panel.add(new JLabel("[Circle] Radius m:"));
-        panel.add(radiusField);
-        panel.add(startButton);
-        panel.add(stopButton);
-        return panel;
-    }
-
-    private void onStart() {
-        SimulationConfig config;
+    private void poll() {
         try {
-            config = buildConfig();
-        } catch (IllegalArgumentException e) {
-            JOptionPane.showMessageDialog(this,
-                    "Please check your inputs - " + e.getMessage(),
-                    "Invalid input", JOptionPane.ERROR_MESSAGE);
-            return;
-        }
-
-        if (currentEngine != null) {
-            currentEngine.stop();
-        }
-        mapPanel.clear();
-
-        UiNetworkApi networkApi = new UiNetworkApi(mapPanel);
-        currentEngine = SimulationEngine.create(config, networkApi, Plane::new);
-        currentEngine.start();
-
-        startButton.setEnabled(false);
-        stopButton.setEnabled(true);
-    }
-
-    private void onStop() {
-        if (currentEngine != null) {
-            currentEngine.stop();
-            currentEngine = null;
-        }
-        startButton.setEnabled(true);
-        stopButton.setEnabled(false);
-    }
-
-    private SimulationConfig buildConfig() {
-        double originLatRad = Math.toRadians(parse(originLatField, "origin latitude"));
-        double originLonRad = Math.toRadians(parse(originLonField, "origin longitude"));
-        int planeCount = (Integer) planeCountSpinner.getValue();
-        double speedMps = parse(speedField, "speed");
-        double altitudeMeters = parse(altitudeField, "altitude");
-        long publishIntervalMs = (long) parse(publishIntervalField, "publish interval");
-
-        FormationSpec formation;
-        if ("Circle".equals(formationTypeCombo.getSelectedItem())) {
-            formation = new CircleFormation(parse(radiusField, "radius"));
-        } else {
-            double destLatRad = Math.toRadians(parse(destLatField, "destination latitude"));
-            double destLonRad = Math.toRadians(parse(destLonField, "destination longitude"));
-            formation = new LineFormation(destLatRad, destLonRad, parse(spacingField, "spacing"));
-        }
-
-        return new SimulationConfig(originLatRad, originLonRad, planeCount, speedMps, altitudeMeters,
-                publishIntervalMs, formation);
-    }
-
-    private static double parse(JTextField field, String fieldName) {
-        try {
-            return Double.parseDouble(field.getText().trim());
-        } catch (NumberFormatException e) {
-            throw new NumberFormatException(fieldName + " must be a number");
+            List<ScenarioDto> scenarios = pollingClient.fetchScenarios();
+            Map<String, PlaneSnapshot> snapshots = new HashMap<>();
+            for (ScenarioDto scenario : scenarios) {
+                for (PlaneStateDto plane : scenario.planes) {
+                    snapshots.put(scenario.id + "#" + plane.index,
+                            new PlaneSnapshot(plane.latRad, plane.lonRad, plane.headingDeg));
+                }
+            }
+            String statusText = scenarios.size() + " scenarios, " + snapshots.size() + " planes";
+            SwingUtilities.invokeLater(() -> {
+                mapPanel.replaceAll(snapshots);
+                statusLabel.setText(statusText);
+            });
+            lastPollFailed = false;
+        } catch (ConnectException e) {
+            // Expected whenever SimulationServerApp isn't up yet (or was restarted); don't spam a
+            // stack trace once per poll interval, just surface it once and keep retrying silently.
+            if (!lastPollFailed) {
+                System.err.println("Cannot reach server at " + serverUrl + " (retrying every "
+                        + POLL_INTERVAL_MS + "ms) - is SimulationServerApp running?");
+            }
+            lastPollFailed = true;
+            SwingUtilities.invokeLater(() -> statusLabel.setText("Server not reachable at " + serverUrl));
+        } catch (Exception e) {
+            if (!lastPollFailed) {
+                e.printStackTrace();
+            }
+            lastPollFailed = true;
+            SwingUtilities.invokeLater(() -> statusLabel.setText("Poll failed: " + e.getMessage()));
         }
     }
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> new PlaneSimulatorUiApp().setVisible(true));
+        String serverUrl = System.getProperty("serverUrl", "http://localhost:8080");
+        SwingUtilities.invokeLater(() -> new PlaneSimulatorUiApp(serverUrl).setVisible(true));
     }
 }

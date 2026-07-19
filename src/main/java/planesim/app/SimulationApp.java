@@ -7,6 +7,9 @@ import planesim.core.SimulationEngine;
 import planesim.formation.CircleFormation;
 import planesim.formation.LineFormation;
 
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+
 /**
  * Example wiring for both formation types. Replace the {@link Plane}/{@link NetworkApi}
  * placeholders with your real library imports and this is basically all the setup code you need.
@@ -47,9 +50,11 @@ public final class SimulationApp {
                 "lat=%.6f lon=%.6f alt=%.1f vx=%.2f vy=%.2f heading=%.1f%n",
                 plane.latitude, plane.longitude, plane.altitude, plane.vx, plane.vy, plane.heading);
 
-        SimulationEngine engine = SimulationEngine.create(config, networkApi, Plane::new);
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        SimulationEngine engine = SimulationEngine.create(config, networkApi, Plane::new, scheduler);
         engine.start();
         Thread.sleep(millis);
-        engine.stop();
+        engine.pause();
+        scheduler.shutdown();
     }
 }

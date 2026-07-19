@@ -18,10 +18,15 @@ treat them as the real contract to design around.
 
 The project's one real purpose is: **create simulated plane objects, move them over time, and
 send their state through the NetworkApi.** That's `SimulationEngine`, `SimulatedPlane`,
-`FlightBehavior`, `FormationPlanner`, `GeoMath`, and `Vector2`. Everything else — `SimulationApp`,
-`PlaneSimulatorUiApp`, `MapPanel`, `UiNetworkApi`, `PlaneSnapshot` — exists only to exercise and
-visually verify that core loop; it is test/demo scaffolding, not a feature to expand for its own
-sake.
+`FlightBehavior`, `FormationPlanner`, `GeoMath`, and `Vector2`. On top of that core loop,
+`planesim.scenario`/`planesim.server` expose a real, maintained JSON HTTP API
+(`SimulationServerApp`) for creating, listing, starting, pausing, and deleting multiple concurrent
+simulation *scenarios* — this is a genuine feature, not scaffolding. `SimulationApp` and the
+`planesim.ui` package (`PlaneSimulatorUiApp`, `MapPanel`, `PlaneSnapshot`), by contrast, exist only
+to exercise and visually verify the simulation/API; they are test/demo scaffolding, not features to
+expand for their own sake. In particular the UI is deliberately **view-only** — it has no code path
+that can create, start, pause, or delete a scenario, only `GET /getScenarios` polling — don't add
+one without being asked.
 
 Coordinates on the simulated objects (`Plane.latitude`/`longitude`, and everywhere upstream of
 them: `SimulationConfig`, `LineFormation`, `CircleFormation`) **must stay WGS84 radians** — that's
@@ -32,18 +37,32 @@ meters (`Vector2`, the flat frame) exist only as an internal computation detail 
 
 ## Build / run
 
-Plain Maven project, Java 17, no external dependencies, no test framework wired up yet.
+Maven project, Java 17, one dependency (Gson, for the JSON HTTP API), `exec-maven-plugin` wired up,
+no test framework yet.
 
 ```
 mvn compile
-mvn exec:java -Dexec.mainClass=planesim.app.SimulationApp        # headless console demo
-mvn exec:java -Dexec.mainClass=planesim.ui.PlaneSimulatorUiApp   # Swing UI test harness
+mvn exec:java -Dexec.mainClass=planesim.app.SimulationApp          # headless console demo
+mvn exec:java -Dexec.mainClass=planesim.server.SimulationServerApp # HTTP API, default port 8080
+mvn exec:java -Dexec.mainClass=planesim.ui.PlaneSimulatorUiApp     # view-only Swing dashboard, polls the API
 ```
 
-There is no `exec-maven-plugin` declared in `pom.xml`, so either add it first or run the compiled
-classes directly (`java -cp target/classes planesim.app.SimulationApp`).
+The UI expects the server already running (it polls `http://localhost:8080` by default, override
+with `-DserverUrl=http://host:port`). There are no tests in `src/test` yet — see "Manual API smoke
+test" below for how the HTTP endpoints were last verified end-to-end.
 
-There are no tests in `src/test` yet.
+### Manual API smoke test
+
+```
+curl -X POST http://localhost:8080/createScenario -H "Content-Type: application/json" -d '{
+  "type":"PLANE","amount":5,"originLatRad":0.3575,"originLonRad":0.9838,"sendInterval":500,
+  "formation":{"type":"LINE","destLatRad":0.4300,"destLonRad":1.0500,"spacingMeters":2000}
+}'
+curl http://localhost:8080/getScenarios
+curl -X POST http://localhost:8080/start  -H "Content-Type: application/json" -d '{"id":"<id>"}'
+curl -X POST http://localhost:8080/pause  -H "Content-Type: application/json" -d '{"id":"<id>"}'
+curl -X POST http://localhost:8080/deleteScenario -H "Content-Type: application/json" -d '{"id":"<id>"}'
+```
 
 ## Integrating the real Plane / NetworkApi
 
@@ -73,17 +92,29 @@ is acyclic:
   formation specs (data only, no logic, no dependencies on anything else in the project).
 - `planesim.core` — `SimulationConfig`, `SimulatedPlane`, `FormationPlanner`, `SimulationEngine`:
   the orchestration nucleus, i.e. the project's one real purpose (see above). Depends on `api`,
-  `geo`, `behavior`, and `formation`.
+  `geo`, `behavior`, and `formation`. `SimulationEngine` doesn't own a thread — see Architecture
+  below.
+- `planesim.scenario` — `ScenarioType`, `ScenarioStatus`, `PlaneLiveState`, `ScenarioNetworkApi`,
+  `Scenario`, `ScenarioManager`: the multi-scenario domain layer (a thread-safe registry of
+  concurrently-running `SimulationEngine`s, one shared thread pool). No HTTP/JSON knowledge.
+  Depends on `core`, `api`.
+- `planesim.server` (+ `planesim.server.dto`) — `SimulationServerApp`, the `com.sun.net.httpserver`
+  wiring/handlers, `RequestMapper`, and the JSON wire-format DTOs. Pure transport; depends on
+  `scenario`, `core`, `formation`.
 - `planesim.app` — `SimulationApp`: headless console demo. Depends on `core`, `formation`, `api`.
-- `planesim.ui` — `PlaneSimulatorUiApp`, `MapPanel`, `UiNetworkApi`, `PlaneSnapshot`: Swing test
-  harness. Depends on `core`, `formation`, `api`, `geo`.
+- `planesim.ui` — `PlaneSimulatorUiApp`, `MapPanel`, `PlaneSnapshot`, `ScenarioPollingClient`: a
+  view-only Swing dashboard. Depends on `server.dto` (reuses `ScenarioDto`/`PlaneStateDto` as its
+  wire format directly rather than inventing a parallel client-side DTO set — still acyclic, since
+  nothing in `server`/`scenario`/`core` ever imports `ui`) and `geo`. Notably does **not** depend
+  on `core`/`api` anymore — the UI never runs a `SimulationEngine` in-process; it only talks HTTP.
 
 Because Java visibility doesn't reach across packages, a few types that used to be package-private
 when everything lived in one package are now `public` purely so `core` can consume them from
 `behavior` (`FlightBehavior`, `StepResult`, `LineBounceBehavior`, `CircleRandomWalkBehavior`).
 Types only ever constructed by a class in their own package kept their package-private visibility:
-`SimulatedPlane` (built by `FormationPlanner`, driven by `SimulationEngine`, both in `core`) and
-`MapPanel`/`UiNetworkApi`/`PlaneSnapshot` (all only used by `PlaneSimulatorUiApp`, all in `ui`).
+`SimulatedPlane` (built by `FormationPlanner`, driven by `SimulationEngine`, both in `core`),
+`MapPanel`/`PlaneSnapshot` (only used by `PlaneSimulatorUiApp`, in `ui`), and `ScenarioNetworkApi`
+(only used by `ScenarioManager`, in `scenario`).
 
 ## Architecture
 
@@ -94,12 +125,35 @@ and out. This is because vx/vy are linear (m/s) and lat/lon are angular — they
 directly. The projection is a simple equirectangular ("plate carrée") approximation, fine at
 regional/continental scale, not for intercontinental great-circle distances.
 
-**Single-threaded tick loop.** `SimulationEngine` owns one `ScheduledExecutorService` and, every
-`publishIntervalMs`, does two full passes over the formation: (1) send every plane's *current*
-state via `networkApi.send()`, then (2) advance every plane to its next-tick position/velocity.
-This "send, then update" order means what's published is always the position as of that tick, not
-one tick ahead. Because everything runs from a single scheduler thread, `SimulatedPlane` and the
-`FlightBehavior` implementations are deliberately not thread-safe / hold no locks.
+**Tick loop, on a shared pool.** `SimulationEngine` does not own a thread: it's handed a
+`ScheduledExecutorService` (typically shared across many engines/scenarios) via `create(...)`, and
+every `publishIntervalMs` does two full passes over its own formation: (1) send every plane's
+*current* state via `networkApi.send()`, then (2) advance every plane to its next-tick
+position/velocity. This "send, then update" order means what's published is always the position as
+of that tick, not one tick ahead. `SimulatedPlane` and the `FlightBehavior` implementations are
+deliberately not thread-safe / hold no locks — this is still safe with a shared pool because
+`ScheduledThreadPoolExecutor` guarantees one task's successive executions never overlap (a late run
+delays the next rather than running concurrently), and different engines never share
+`SimulatedPlane` objects (each `create()` builds its own private formation list), so only *one*
+engine's tick ever touches a given `SimulatedPlane` at a time, even across different pool threads.
+
+**Lifecycle: `start()`/`pause()`, not `stop()`.** There is no `stop()` — `pause()` cancels the
+engine's own scheduled task (via its `ScheduledFuture`) without touching the shared executor or
+losing plane state, and `start()` either begins ticking for the first time or resumes a paused
+engine from wherever it left off (same `SimulatedPlane` instances, same position/velocity). Both
+methods, plus `tick()`, are `synchronized` on the engine to serialize a pause-then-immediately-resume
+race (otherwise a new scheduled chain could start while an orphaned in-flight tick from the
+cancelled chain is still running). Whoever creates the `ScheduledExecutorService` owns shutting it
+down — the engine never does.
+
+**Multiple concurrent scenarios.** `ScenarioManager` (in `planesim.scenario`) is the thread-safe
+registry behind the HTTP API: `createScenario` builds a `SimulationEngine` on the manager's shared
+pool plus a `ScenarioNetworkApi` (records each plane's latest published state — the same
+capture-for-rendering idea `MapPanel` used to get fed with directly in-process, but thread-safe
+since HTTP handler threads read it concurrently with the tick thread writing it); `start`/`pause`/
+`delete` all key off
+the scenario's UUID id and return `false` for an unknown id (mapped to HTTP 404). `delete` calls
+`pause()` before dropping the scenario so its scheduled task doesn't leak on the shared pool.
 
 **Behavior strategy per plane.** `SimulatedPlane` holds local-frame `position`/`velocity` plus a
 `FlightBehavior` (`step(position, velocity, dtSeconds) -> StepResult`) that owns how that one
@@ -122,25 +176,49 @@ the initial list of `SimulatedPlane`s with their starting positions, velocities,
   undefined at the center); for n>1, planes are spaced `360/n` degrees apart starting due east,
   each initially facing radially outward, then wandering independently via random walk.
 
-**Swing UI is a disposable test harness**, not production code. `PlaneSimulatorUiApp` builds a
-`SimulationConfig` from form fields and swaps in `UiNetworkApi` (implements `NetworkApi` by
-forwarding to `MapPanel` instead of a real network) — nothing else about the simulation setup
-differs from the real `NetworkApi` path in `SimulationApp`. `MapPanel` auto-fits its view to
-whichever planes are currently tracked (using `GeoMath`'s same local-meter projection so shapes
-stay geometrically correct) rather than rendering a real world map, since a single formation is
-meter/km-scale and would be sub-pixel on any real map projection.
+**HTTP API.** `SimulationServerApp` wires five `com.sun.net.httpserver` handlers (one per endpoint:
+`POST /createScenario`, `GET /getScenarios`, `POST /deleteScenario`, `POST /start`, `POST /pause`)
+over a `ScenarioManager`, on top of one shared `Executors.newScheduledThreadPool(...)` for scenario
+ticking, separate from the pool that serves incoming HTTP requests. `AbstractJsonHandler`
+centralizes method checking, JSON body (de)serialization (Gson), and mapping exceptions to status
+codes: `400` for `BadRequestException`/`IllegalArgumentException`/`NullPointerException`/
+`JsonSyntaxException` (this is how `SimulationConfig`/`LineFormation`/`CircleFormation`'s own
+compact-constructor validation surfaces as a 400 without `RequestMapper` duplicating those checks),
+`404` for an unknown scenario id, `405` for the wrong verb, `500` for anything else. Coordinates in
+the JSON API are radians, matching the internal representation exactly — no conversion at this
+boundary.
+
+**Swing UI is a disposable, view-only test harness**, not production code. `PlaneSimulatorUiApp`
+has no config form and no Start/Stop controls — on launch it just polls `GET /getScenarios` on a
+fixed interval via `ScenarioPollingClient` (a small `java.net.http.HttpClient` wrapper) and renders
+every scenario's planes together on one `MapPanel`. Because plane data now arrives as parsed JSON
+rather than shared in-process `Plane` objects, `MapPanel` keys planes by a `scenarioId + "#" +
+planeIndex` string and does an atomic full-snapshot replace each poll (`replaceAll`) rather than
+incremental per-plane updates — this also correctly drops planes belonging to a since-deleted
+scenario. `MapPanel` still auto-fits its view to whichever planes are currently tracked (using
+`GeoMath`'s same local-meter projection so shapes stay geometrically correct) rather than rendering
+a real world map, since a single formation is meter/km-scale and would be sub-pixel on any real map
+projection. Poll-thread UI mutations are wrapped in `SwingUtilities.invokeLater`.
 
 ## Conventions worth preserving
 
 - Angles in the public data model (`Plane`, `SimulationConfig`, `LineFormation`, `CircleFormation`)
-  are radians; the UI form fields are the one place degrees are accepted from a human and
-  converted at the boundary (`Math.toRadians`/`toDegrees`).
+  are radians, all the way out through the JSON HTTP API — there is currently no place in this
+  codebase that accepts degrees from a human (the old Swing config form that used to convert
+  degrees at its boundary via `Math.toRadians`/`toDegrees` was removed when the UI became
+  view-only).
 - Package-private (no modifier) visibility is used deliberately for internals only constructed by
-  another class in the same package (`SimulatedPlane`, `MapPanel`, `UiNetworkApi`) — keep new
-  same-package-only types package-private rather than defaulting to `public`. Types that must be
-  constructed from a different package (e.g. `core` building `behavior` implementations) have to
-  be `public` — that's a Java visibility constraint, not license to make everything public; see
-  "Package structure" above for which types are public out of necessity vs. by design.
+  another class in the same package (`SimulatedPlane`, `MapPanel`, `PlaneSnapshot`,
+  `ScenarioNetworkApi`) — keep new same-package-only types package-private rather than defaulting
+  to `public`. Types that must be constructed from a different package (e.g. `core` building
+  `behavior` implementations) have to be `public` — that's a Java visibility constraint, not
+  license to make everything public; see "Package structure" above for which types are public out
+  of necessity vs. by design.
 - Records (`Vector2`, `StepResult`, `PlaneSnapshot`, `SimulationConfig`, `LineFormation`,
-  `CircleFormation`) are used for immutable value types; compact constructors validate invariants
-  (e.g. `SimulationConfig`, `LineFormation`, `CircleFormation` reject negative/non-positive values).
+  `CircleFormation`, `PlaneLiveState`) are used for immutable internal value types; compact
+  constructors validate invariants (e.g. `SimulationConfig`, `LineFormation`, `CircleFormation`
+  reject negative/non-positive values). The HTTP API's wire-format types
+  (`planesim.server.dto.*`) are the one deliberate exception — plain public classes with public
+  fields, not records, since they're unvalidated JSON transfer objects (validation happens once,
+  explicitly, in `RequestMapper`) and Gson deserialization of absent/optional JSON fields is
+  simplest against plain mutable fields.
