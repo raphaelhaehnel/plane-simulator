@@ -9,8 +9,8 @@ weather has no formation or coordinates — it's just periodic readings.
 
 ```
 mvn compile
-mvn exec:java -Dexec.mainClass=planesim.server.SimulationServerApp   # starts the API on :8080
-mvn exec:java -Dexec.mainClass=planesim.ui.PlaneSimulatorUiApp       # optional: view-only map (needs the server running)
+mvn exec:java -Dexec.mainClass=planesim.core.server.SimulationServerApp   # starts the API on :8080
+mvn exec:java -Dexec.mainClass=planesim.view.ui.PlaneSimulatorUiApp       # optional: view-only map (needs the server running)
 ```
 
 ## Endpoints

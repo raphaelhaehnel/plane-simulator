@@ -1,8 +1,0 @@
-package planesim.scenario;
-
-/** Lifecycle state of a {@link Scenario}. */
-public enum ScenarioStatus {
-    CREATED,
-    RUNNING,
-    PAUSED
-}
