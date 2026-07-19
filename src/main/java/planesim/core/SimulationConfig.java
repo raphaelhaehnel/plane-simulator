@@ -10,22 +10,23 @@ import planesim.formation.LineFormation;
  * <p>{@code originLatRad}/{@code originLonRad} is the source point for a {@link LineFormation}
  * or the circle's center for a {@link CircleFormation}.
  *
- * <p>All planes currently share the same speed and altitude. If you want per-plane speed/altitude
- * later, swap those two fields for a per-index supplier; nothing else in the design needs to
- * change.
+ * <p>All objects currently share the same speed and altitude (speed is meaningless for a static
+ * object, e.g. a radar — it's simply not applied by that object's {@code FlightBehavior}). If you
+ * want per-object speed/altitude later, swap those two fields for a per-index supplier; nothing
+ * else in the design needs to change.
  */
 public record SimulationConfig(
         double originLatRad,
         double originLonRad,
-        int planeCount,
+        int objectCount,
         double speedMps,
         double altitudeMeters,
         long publishIntervalMs,
         FormationSpec formation
 ) {
     public SimulationConfig {
-        if (planeCount <= 0) {
-            throw new IllegalArgumentException("planeCount must be positive");
+        if (objectCount <= 0) {
+            throw new IllegalArgumentException("objectCount must be positive");
         }
         if (speedMps <= 0) {
             throw new IllegalArgumentException("speedMps must be positive");

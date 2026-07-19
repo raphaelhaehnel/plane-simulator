@@ -1,7 +1,7 @@
 package planesim.server.dto;
 
-/** Live state of one plane, embedded in {@link ScenarioDto}. */
-public class PlaneStateDto {
+/** Live state of one simulated object (plane, radar, ...), embedded in {@link ScenarioDto}. */
+public class ObjectStateDto {
     public int index;
     public double latRad;
     public double lonRad;

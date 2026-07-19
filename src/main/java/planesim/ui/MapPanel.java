@@ -26,9 +26,10 @@ import java.util.function.ToDoubleFunction;
  * itself uses ({@link GeoMath}), so circles stay circular and lines stay straight at any zoom
  * level. A light distance grid stands in for lat/lon graticules.
  *
- * <p>Planes are keyed by a caller-supplied String id (e.g. {@code scenarioId + "#" + planeIndex})
- * rather than object identity, since plane data now arrives over HTTP as parsed JSON with no
- * shared object identity across the process boundary.
+ * <p>Objects are keyed by a caller-supplied String id (e.g. {@code scenarioId + "#" + index})
+ * rather than object identity, since object data now arrives over HTTP as parsed JSON with no
+ * shared object identity across the process boundary. Every object (plane, radar, ...) is drawn
+ * with the same icon — this is a generic tracked-object view, not a plane-specific one.
  */
 final class MapPanel extends JPanel {
 
@@ -147,11 +148,11 @@ final class MapPanel extends JPanel {
         }
     }
 
-    private void drawLegend(Graphics2D g2, int width, int height, double gridStepM, int planeCount,
+    private void drawLegend(Graphics2D g2, int width, int height, double gridStepM, int objectCount,
                              double originLatRad, double originLonRad) {
         String text = String.format(Locale.US,
-                "planes: %d   grid: %s   view centered near lat %.4f%s, lon %.4f%s (local projection - not a real map)",
-                planeCount, formatDistance(gridStepM),
+                "objects: %d   grid: %s   view centered near lat %.4f%s, lon %.4f%s (local projection - not a real map)",
+                objectCount, formatDistance(gridStepM),
                 Math.toDegrees(originLatRad), "\u00B0", Math.toDegrees(originLonRad), "\u00B0");
         g2.setColor(AXIS_LINE);
         g2.setFont(g2.getFont().deriveFont(Font.PLAIN, 12f));

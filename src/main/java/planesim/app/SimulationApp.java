@@ -2,6 +2,9 @@ package planesim.app;
 
 import planesim.api.NetworkApi;
 import planesim.api.Plane;
+import planesim.api.Radar;
+import planesim.core.MovementStyle;
+import planesim.core.ObjectWriters;
 import planesim.core.SimulationConfig;
 import planesim.core.SimulationEngine;
 import planesim.formation.CircleFormation;
@@ -11,14 +14,29 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
 /**
- * Example wiring for both formation types. Replace the {@link Plane}/{@link NetworkApi}
- * placeholders with your real library imports and this is basically all the setup code you need.
+ * Example wiring for both formation types and both simulated object types. Replace the
+ * {@link Plane}/{@link Radar}/{@link NetworkApi} placeholders with your real library imports and
+ * this is basically all the setup code you need.
  */
 public final class SimulationApp {
+
+    private static final NetworkApi NETWORK_API = new NetworkApi() {
+        @Override
+        public void send(Plane plane) {
+            System.out.printf("plane lat=%.6f lon=%.6f alt=%.1f vx=%.2f vy=%.2f heading=%.1f%n",
+                    plane.latitude, plane.longitude, plane.altitude, plane.vx, plane.vy, plane.heading);
+        }
+
+        @Override
+        public void send(Radar radar) {
+            System.out.printf("radar lat=%.6f lon=%.6f alt=%.1f%n", radar.latitude, radar.longitude, radar.altitude);
+        }
+    };
 
     public static void main(String[] args) throws InterruptedException {
         runLineExample();
         runCircleExample();
+        runRadarExample();
     }
 
     private static void runLineExample() throws InterruptedException {
@@ -30,7 +48,7 @@ public final class SimulationApp {
                 500,                                         // publish interval, ms
                 new LineFormation(0.4300, 1.0500, 2000.0)    // destination lat/lon (radians), spacing (meters)
         );
-        runFor(config, 5_000);
+        runPlanesFor(config, 5_000);
     }
 
     private static void runCircleExample() throws InterruptedException {
@@ -42,16 +60,36 @@ public final class SimulationApp {
                 500,                          // publish interval, ms
                 new CircleFormation(5000.0)  // circle radius, meters
         );
-        runFor(config, 5_000);
+        runPlanesFor(config, 5_000);
     }
 
-    private static void runFor(SimulationConfig config, long millis) throws InterruptedException {
-        NetworkApi networkApi = plane -> System.out.printf(
-                "lat=%.6f lon=%.6f alt=%.1f vx=%.2f vy=%.2f heading=%.1f%n",
-                plane.latitude, plane.longitude, plane.altitude, plane.vx, plane.vy, plane.heading);
+    /** Radars are static, so this only demonstrates placement (evenly spaced around a circle), not movement. */
+    private static void runRadarExample() throws InterruptedException {
+        SimulationConfig config = new SimulationConfig(
+                0.3575, 0.9838,              // circle center lat/lon, radians
+                4,                            // number of radars
+                230.0,                        // speed, m/s (ignored - radars never move)
+                50.0,                         // altitude, meters
+                1000,                         // publish interval, ms
+                new CircleFormation(8000.0)  // circle radius, meters - just spaces the radars out
+        );
+        runRadarsFor(config, 3_000);
+    }
 
+    private static void runPlanesFor(SimulationConfig config, long millis) throws InterruptedException {
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-        SimulationEngine engine = SimulationEngine.create(config, networkApi, Plane::new, scheduler);
+        SimulationEngine<Plane> engine = SimulationEngine.create(config, MovementStyle.MOBILE,
+                NETWORK_API::send, Plane::new, ObjectWriters.PLANE, scheduler);
+        engine.start();
+        Thread.sleep(millis);
+        engine.pause();
+        scheduler.shutdown();
+    }
+
+    private static void runRadarsFor(SimulationConfig config, long millis) throws InterruptedException {
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        SimulationEngine<Radar> engine = SimulationEngine.create(config, MovementStyle.STATIC,
+                NETWORK_API::send, Radar::new, ObjectWriters.RADAR, scheduler);
         engine.start();
         Thread.sleep(millis);
         engine.pause();

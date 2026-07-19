@@ -2,7 +2,7 @@ package planesim.server.dto;
 
 import java.util.List;
 
-/** GET /getScenarios element: a scenario's config, status, and live per-plane snapshot. */
+/** GET /getScenarios element: a scenario's config, status, and live per-object snapshot. */
 public class ScenarioDto {
     public String id;
     public String type;
@@ -14,5 +14,5 @@ public class ScenarioDto {
     public double altitude;
     public long sendInterval;
     public FormationDto formation;
-    public List<PlaneStateDto> planes;
+    public List<ObjectStateDto> objects;
 }

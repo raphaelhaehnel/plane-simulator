@@ -1,6 +1,6 @@
 package planesim.ui;
 
-import planesim.server.dto.PlaneStateDto;
+import planesim.server.dto.ObjectStateDto;
 import planesim.server.dto.ScenarioDto;
 
 import javax.swing.JFrame;
@@ -17,10 +17,10 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * View-only dashboard: polls {@code GET /getScenarios} on the running {@link
- * planesim.server.SimulationServerApp} and renders every scenario's planes together on one map.
- * There is no way to create/start/pause/delete a scenario from here — that's the whole point of
- * going through the HTTP API instead of driving a {@code SimulationEngine} in-process, the way the
- * old form-and-buttons version of this class used to.
+ * planesim.server.SimulationServerApp} and renders every scenario's objects (planes, radars, ...)
+ * together on one map. There is no way to create/start/pause/delete a scenario from here — that's
+ * the whole point of going through the HTTP API instead of driving a {@code SimulationEngine}
+ * in-process, the way the old form-and-buttons version of this class used to.
  */
 public final class PlaneSimulatorUiApp extends JFrame {
 
@@ -59,12 +59,12 @@ public final class PlaneSimulatorUiApp extends JFrame {
             List<ScenarioDto> scenarios = pollingClient.fetchScenarios();
             Map<String, PlaneSnapshot> snapshots = new HashMap<>();
             for (ScenarioDto scenario : scenarios) {
-                for (PlaneStateDto plane : scenario.planes) {
-                    snapshots.put(scenario.id + "#" + plane.index,
-                            new PlaneSnapshot(plane.latRad, plane.lonRad, plane.headingDeg));
+                for (ObjectStateDto object : scenario.objects) {
+                    snapshots.put(scenario.id + "#" + object.index,
+                            new PlaneSnapshot(object.latRad, object.lonRad, object.headingDeg));
                 }
             }
-            String statusText = scenarios.size() + " scenarios, " + snapshots.size() + " planes";
+            String statusText = scenarios.size() + " scenarios, " + snapshots.size() + " objects";
             SwingUtilities.invokeLater(() -> {
                 mapPanel.replaceAll(snapshots);
                 statusLabel.setText(statusText);

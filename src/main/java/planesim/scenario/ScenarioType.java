@@ -1,6 +1,7 @@
 package planesim.scenario;
 
-/** The kind of object a scenario simulates. Only {@link #PLANE} is implemented today. */
+/** The kind of object a scenario simulates. */
 public enum ScenarioType {
-    PLANE
+    PLANE,
+    RADAR
 }

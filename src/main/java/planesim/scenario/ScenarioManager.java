@@ -1,6 +1,9 @@
 package planesim.scenario;
 
 import planesim.api.Plane;
+import planesim.api.Radar;
+import planesim.core.MovementStyle;
+import planesim.core.ObjectWriters;
 import planesim.core.SimulationConfig;
 import planesim.core.SimulationEngine;
 
@@ -25,11 +28,20 @@ public final class ScenarioManager {
         this.sharedScheduler = sharedScheduler;
     }
 
-    /** Creates and registers a new scenario in {@link ScenarioStatus#CREATED} state. Does not start it. */
+    /**
+     * Creates and registers a new scenario in {@link ScenarioStatus#CREATED} state. Does not start
+     * it. Dispatches on {@code type} to pick the right external object class, its {@link
+     * planesim.core.ObjectWriter}, and its {@link MovementStyle} (planes fly, radars stay put).
+     */
     public Scenario createScenario(ScenarioType type, SimulationConfig config) {
         String id = UUID.randomUUID().toString();
         ScenarioNetworkApi networkApi = new ScenarioNetworkApi();
-        SimulationEngine engine = SimulationEngine.create(config, networkApi, Plane::new, sharedScheduler);
+        SimulationEngine<?> engine = switch (type) {
+            case PLANE -> SimulationEngine.<Plane>create(config, MovementStyle.MOBILE,
+                    networkApi::send, Plane::new, ObjectWriters.PLANE, sharedScheduler);
+            case RADAR -> SimulationEngine.<Radar>create(config, MovementStyle.STATIC,
+                    networkApi::send, Radar::new, ObjectWriters.RADAR, sharedScheduler);
+        };
         Scenario scenario = new Scenario(id, type, config, engine, networkApi);
         scenarios.put(id, scenario);
         return scenario;
@@ -50,7 +62,7 @@ public final class ScenarioManager {
         return true;
     }
 
-    /** Halts ticking without losing plane state. False if {@code id} is unknown. */
+    /** Halts ticking without losing object state. False if {@code id} is unknown. */
     public boolean pause(String id) {
         Scenario scenario = scenarios.get(id);
         if (scenario == null) {

@@ -4,12 +4,12 @@ import planesim.core.SimulationConfig;
 import planesim.formation.CircleFormation;
 import planesim.formation.FormationSpec;
 import planesim.formation.LineFormation;
-import planesim.scenario.PlaneLiveState;
+import planesim.scenario.ObjectLiveState;
 import planesim.scenario.Scenario;
 import planesim.scenario.ScenarioType;
 import planesim.server.dto.CreateScenarioRequest;
 import planesim.server.dto.FormationDto;
-import planesim.server.dto.PlaneStateDto;
+import planesim.server.dto.ObjectStateDto;
 import planesim.server.dto.ScenarioDto;
 
 import java.util.Locale;
@@ -18,7 +18,7 @@ import java.util.Locale;
  * Converts between the HTTP-facing DTOs and the internal domain model. Validation here is limited
  * to what the domain types can't check themselves (missing/absent fields, unknown formation type);
  * range checks that {@link SimulationConfig}/{@link LineFormation}/{@link CircleFormation} already
- * enforce in their compact constructors (e.g. planeCount &gt; 0, spacing/radius &gt;= 0) are left to
+ * enforce in their compact constructors (e.g. objectCount &gt; 0, spacing/radius &gt;= 0) are left to
  * those constructors rather than duplicated here.
  */
 public final class RequestMapper {
@@ -36,7 +36,7 @@ public final class RequestMapper {
         try {
             return ScenarioType.valueOf(raw.toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            throw new BadRequestException("Unsupported scenario type: " + raw + " (only PLANE is supported)");
+            throw new BadRequestException("Unsupported scenario type: " + raw + " (must be PLANE or RADAR)");
         }
     }
 
@@ -78,14 +78,14 @@ public final class RequestMapper {
         dto.id = scenario.id();
         dto.type = scenario.type().name();
         dto.status = scenario.status().name();
-        dto.amount = c.planeCount();
+        dto.amount = c.objectCount();
         dto.originLatRad = c.originLatRad();
         dto.originLonRad = c.originLonRad();
         dto.speed = c.speedMps();
         dto.altitude = c.altitudeMeters();
         dto.sendInterval = c.publishIntervalMs();
         dto.formation = toFormationDto(c.formation());
-        dto.planes = scenario.liveSnapshot().stream().map(RequestMapper::toPlaneDto).toList();
+        dto.objects = scenario.liveSnapshot().stream().map(RequestMapper::toObjectDto).toList();
         return dto;
     }
 
@@ -103,12 +103,12 @@ public final class RequestMapper {
         return dto;
     }
 
-    private static PlaneStateDto toPlaneDto(PlaneLiveState p) {
-        PlaneStateDto dto = new PlaneStateDto();
-        dto.index = p.index();
-        dto.latRad = p.latRad();
-        dto.lonRad = p.lonRad();
-        dto.headingDeg = p.headingDeg();
+    private static ObjectStateDto toObjectDto(ObjectLiveState state) {
+        ObjectStateDto dto = new ObjectStateDto();
+        dto.index = state.index();
+        dto.latRad = state.latRad();
+        dto.lonRad = state.lonRad();
+        dto.headingDeg = state.headingDeg();
         return dto;
     }
 }

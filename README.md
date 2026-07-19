@@ -1,7 +1,8 @@
 # PlanesSimulator API
 
-Simulates planes flying in a line or circle formation and lets you control multiple simulations
-("scenarios") over a simple JSON HTTP API.
+Simulates objects (planes, radars) arranged in a line or circle formation and lets you control
+multiple simulations ("scenarios") over a simple JSON HTTP API. Planes fly their formation; radars
+are static — they get placed by the formation but never move.
 
 ## Run it
 
@@ -33,23 +34,26 @@ All bodies are JSON. Coordinates are radians. `speed`/`altitude` are optional (d
   }
 }
 ```
-For `"type": "CIRCLE"` formations, replace `destLatRad`/`destLonRad`/`spacingMeters` with
-`"radiusMeters": 5000`.
+`type` is `"PLANE"` or `"RADAR"`. A radar is static (never moves) — it still needs a `formation` to
+decide where it's placed, but `speed` doesn't do anything for it. For `"type": "CIRCLE"`
+formations, replace `destLatRad`/`destLonRad`/`spacingMeters` with `"radiusMeters": 5000`.
 
 Response: `{ "id": "<uuid>" }`
 
 ### `GET /getScenarios`
 
-Returns every scenario's config, status (`CREATED` / `RUNNING` / `PAUSED`), and live plane
+Returns every scenario's config, status (`CREATED` / `RUNNING` / `PAUSED`), and live object
 positions:
 ```json
 [
   {
-    "id": "...", "status": "RUNNING", "formation": { "type": "LINE", ... },
-    "planes": [ { "index": 0, "latRad": 0.357, "lonRad": 0.984, "headingDeg": 40.5 } ]
+    "id": "...", "type": "PLANE", "status": "RUNNING", "formation": { "type": "LINE", ... },
+    "objects": [ { "index": 0, "latRad": 0.357, "lonRad": 0.984, "headingDeg": 40.5 } ]
   }
 ]
 ```
+For a `RADAR` scenario, `objects[].headingDeg` is always `0.0` (a static object has no heading) and
+`latRad`/`lonRad` never change between polls.
 
 ### `POST /start`, `POST /pause`, `POST /deleteScenario`
 
@@ -74,6 +78,12 @@ curl http://localhost:8080/getScenarios
 curl -X POST http://localhost:8080/pause -H "Content-Type: application/json" -d '{"id":"<id>"}'
 curl -X POST http://localhost:8080/stopAll
 curl -X POST http://localhost:8080/deleteScenario -H "Content-Type: application/json" -d '{"id":"<id>"}'
+
+# a static radar scenario
+curl -X POST http://localhost:8080/createScenario -H "Content-Type: application/json" -d '{
+  "type":"RADAR","amount":3,"originLatRad":0.3575,"originLonRad":0.9838,"sendInterval":1000,
+  "formation":{"type":"CIRCLE","radiusMeters":6000}
+}'
 ```
 
 ## Errors
