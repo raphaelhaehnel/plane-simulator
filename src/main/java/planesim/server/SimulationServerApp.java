@@ -10,10 +10,10 @@ import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * Entry point for the HTTP API: exposes {@code POST /createScenario}, {@code GET /getScenarios},
- * {@code POST /deleteScenario}, {@code POST /start}, and {@code POST /pause} over a
- * {@link ScenarioManager}. All scenarios' ticking shares one bounded {@link ScheduledExecutorService}
- * (see {@code SimulationEngine}'s javadoc for why that's safe), separate from the pool that serves
- * incoming HTTP requests.
+ * {@code POST /deleteScenario}, {@code POST /start}, {@code POST /pause}, and
+ * {@code POST /stopAll} over a {@link ScenarioManager}. All scenarios' ticking shares one bounded
+ * {@link ScheduledExecutorService} (see {@code SimulationEngine}'s javadoc for why that's safe),
+ * separate from the pool that serves incoming HTTP requests.
  */
 public final class SimulationServerApp {
 
@@ -32,6 +32,7 @@ public final class SimulationServerApp {
         server.createContext("/deleteScenario", new DeleteScenarioHandler(manager));
         server.createContext("/start", new StartScenarioHandler(manager));
         server.createContext("/pause", new PauseScenarioHandler(manager));
+        server.createContext("/stopAll", new StopAllScenariosHandler(manager));
         server.setExecutor(Executors.newCachedThreadPool());
         server.start();
 

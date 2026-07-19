@@ -4,6 +4,7 @@ import planesim.api.Plane;
 import planesim.core.SimulationConfig;
 import planesim.core.SimulationEngine;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -58,6 +59,19 @@ public final class ScenarioManager {
         scenario.engine().pause();
         scenario.setStatus(ScenarioStatus.PAUSED);
         return true;
+    }
+
+    /** Pauses every currently {@link ScenarioStatus#RUNNING} scenario. Returns the ids that were actually stopped. */
+    public List<String> stopAll() {
+        List<String> stoppedIds = new ArrayList<>();
+        for (Scenario scenario : scenarios.values()) {
+            if (scenario.status() == ScenarioStatus.RUNNING) {
+                scenario.engine().pause();
+                scenario.setStatus(ScenarioStatus.PAUSED);
+                stoppedIds.add(scenario.id());
+            }
+        }
+        return stoppedIds;
     }
 
     /** Removes a scenario from memory, stopping its ticking first. False if {@code id} is unknown. */

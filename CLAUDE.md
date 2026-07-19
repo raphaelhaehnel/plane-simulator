@@ -20,13 +20,13 @@ The project's one real purpose is: **create simulated plane objects, move them o
 send their state through the NetworkApi.** That's `SimulationEngine`, `SimulatedPlane`,
 `FlightBehavior`, `FormationPlanner`, `GeoMath`, and `Vector2`. On top of that core loop,
 `planesim.scenario`/`planesim.server` expose a real, maintained JSON HTTP API
-(`SimulationServerApp`) for creating, listing, starting, pausing, and deleting multiple concurrent
-simulation *scenarios* — this is a genuine feature, not scaffolding. `SimulationApp` and the
-`planesim.ui` package (`PlaneSimulatorUiApp`, `MapPanel`, `PlaneSnapshot`), by contrast, exist only
-to exercise and visually verify the simulation/API; they are test/demo scaffolding, not features to
-expand for their own sake. In particular the UI is deliberately **view-only** — it has no code path
-that can create, start, pause, or delete a scenario, only `GET /getScenarios` polling — don't add
-one without being asked.
+(`SimulationServerApp`) for creating, listing, starting, pausing (individually or all at once via
+`/stopAll`), and deleting multiple concurrent simulation *scenarios* — this is a genuine feature,
+not scaffolding. `SimulationApp` and the `planesim.ui` package (`PlaneSimulatorUiApp`, `MapPanel`,
+`PlaneSnapshot`), by contrast, exist only to exercise and visually verify the simulation/API; they
+are test/demo scaffolding, not features to expand for their own sake. In particular the UI is
+deliberately **view-only** — it has no code path that can create, start, pause, or delete a
+scenario, only `GET /getScenarios` polling — don't add one without being asked.
 
 Coordinates on the simulated objects (`Plane.latitude`/`longitude`, and everywhere upstream of
 them: `SimulationConfig`, `LineFormation`, `CircleFormation`) **must stay WGS84 radians** — that's
@@ -61,6 +61,7 @@ curl -X POST http://localhost:8080/createScenario -H "Content-Type: application/
 curl http://localhost:8080/getScenarios
 curl -X POST http://localhost:8080/start  -H "Content-Type: application/json" -d '{"id":"<id>"}'
 curl -X POST http://localhost:8080/pause  -H "Content-Type: application/json" -d '{"id":"<id>"}'
+curl -X POST http://localhost:8080/stopAll
 curl -X POST http://localhost:8080/deleteScenario -H "Content-Type: application/json" -d '{"id":"<id>"}'
 ```
 
@@ -151,9 +152,12 @@ registry behind the HTTP API: `createScenario` builds a `SimulationEngine` on th
 pool plus a `ScenarioNetworkApi` (records each plane's latest published state — the same
 capture-for-rendering idea `MapPanel` used to get fed with directly in-process, but thread-safe
 since HTTP handler threads read it concurrently with the tick thread writing it); `start`/`pause`/
-`delete` all key off
-the scenario's UUID id and return `false` for an unknown id (mapped to HTTP 404). `delete` calls
-`pause()` before dropping the scenario so its scheduled task doesn't leak on the shared pool.
+`delete` all key off the scenario's UUID id and return `false` for an unknown id (mapped to HTTP
+404). `delete` calls `pause()` before dropping the scenario so its scheduled task doesn't leak on
+the shared pool. `stopAll()` is the bulk equivalent of `pause` — it iterates every scenario, pauses
+only the ones currently `RUNNING` (skipping `CREATED`/already-`PAUSED` ones), and returns the ids it
+actually stopped; there's no separate "true stop" concept beyond pause, so bulk-stopping is always
+resumable via `/start` just like a single pause is.
 
 **Behavior strategy per plane.** `SimulatedPlane` holds local-frame `position`/`velocity` plus a
 `FlightBehavior` (`step(position, velocity, dtSeconds) -> StepResult`) that owns how that one
@@ -176,9 +180,9 @@ the initial list of `SimulatedPlane`s with their starting positions, velocities,
   undefined at the center); for n>1, planes are spaced `360/n` degrees apart starting due east,
   each initially facing radially outward, then wandering independently via random walk.
 
-**HTTP API.** `SimulationServerApp` wires five `com.sun.net.httpserver` handlers (one per endpoint:
-`POST /createScenario`, `GET /getScenarios`, `POST /deleteScenario`, `POST /start`, `POST /pause`)
-over a `ScenarioManager`, on top of one shared `Executors.newScheduledThreadPool(...)` for scenario
+**HTTP API.** `SimulationServerApp` wires six `com.sun.net.httpserver` handlers (one per endpoint:
+`POST /createScenario`, `GET /getScenarios`, `POST /deleteScenario`, `POST /start`, `POST /pause`,
+`POST /stopAll`) over a `ScenarioManager`, on top of one shared `Executors.newScheduledThreadPool(...)` for scenario
 ticking, separate from the pool that serves incoming HTTP requests. `AbstractJsonHandler`
 centralizes method checking, JSON body (de)serialization (Gson), and mapping exceptions to status
 codes: `400` for `BadRequestException`/`IllegalArgumentException`/`NullPointerException`/

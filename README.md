@@ -55,6 +55,11 @@ positions:
 
 Body: `{ "id": "<uuid>" }`. `/start` also resumes a paused scenario from where it left off.
 
+### `POST /stopAll`
+
+No body needed. Pauses every currently running scenario (same as calling `/pause` on each one).
+Response: `{ "stoppedIds": ["<uuid>", ...] }` — the ids that were actually running and got stopped.
+
 ## Example
 
 ```
@@ -67,6 +72,7 @@ curl -X POST http://localhost:8080/createScenario -H "Content-Type: application/
 curl -X POST http://localhost:8080/start -H "Content-Type: application/json" -d '{"id":"<id>"}'
 curl http://localhost:8080/getScenarios
 curl -X POST http://localhost:8080/pause -H "Content-Type: application/json" -d '{"id":"<id>"}'
+curl -X POST http://localhost:8080/stopAll
 curl -X POST http://localhost:8080/deleteScenario -H "Content-Type: application/json" -d '{"id":"<id>"}'
 ```
 
