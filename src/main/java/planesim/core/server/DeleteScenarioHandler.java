@@ -5,7 +5,7 @@ import com.sun.net.httpserver.HttpExchange;
 import planesim.core.scenario.ScenarioManager;
 import planesim.core.server.dto.DeleteResponse;
 import planesim.core.server.dto.ErrorResponse;
-import planesim.core.server.dto.IdRequest;
+import planesim.core.server.dto.ScenarioIdRequest;
 
 import java.io.IOException;
 
@@ -25,11 +25,12 @@ final class DeleteScenarioHandler extends AbstractJsonHandler {
 
     @Override
     void handleRequest(HttpExchange exchange, Gson gson) throws IOException {
-        IdRequest request = readBody(exchange, gson, IdRequest.class);
-        if (!manager.delete(request.id)) {
-            writeJson(exchange, 404, new ErrorResponse("scenario not found: " + request.id));
+        ScenarioIdRequest request = readBody(exchange, gson, ScenarioIdRequest.class);
+        String id = RequestMapper.requireScenarioId(request);
+        if (!manager.delete(id)) {
+            writeJson(exchange, 404, new ErrorResponse("scenario not found: " + id));
             return;
         }
-        writeJson(exchange, 200, new DeleteResponse(request.id));
+        writeJson(exchange, 200, new DeleteResponse(id));
     }
 }

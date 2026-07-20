@@ -4,12 +4,12 @@ import planesim.external.NetworkApi;
 import planesim.external.Plane;
 import planesim.external.Radar;
 import planesim.external.Weather;
+import planesim.core.engine.GeoScenarioConfig;
 import planesim.core.engine.MovementStyle;
+import planesim.core.engine.NonGeoScenarioConfig;
 import planesim.core.engine.ObjectWriters;
-import planesim.core.engine.SimulationConfig;
 import planesim.core.engine.SimulationEngine;
 import planesim.core.engine.ValueGenerators;
-import planesim.core.engine.ValueSimulationConfig;
 import planesim.core.formation.CircleFormation;
 import planesim.core.formation.LineFormation;
 
@@ -50,7 +50,7 @@ public final class SimulationApp {
     }
 
     private static void runLineExample() throws InterruptedException {
-        SimulationConfig config = new SimulationConfig(
+        GeoScenarioConfig config = new GeoScenarioConfig(
                 0.3575, 0.9838,                             // origin (source) lat/lon, radians (approx. Yemen)
                 5,                                           // number of planes
                 230.0,                                       // speed, m/s
@@ -62,7 +62,7 @@ public final class SimulationApp {
     }
 
     private static void runCircleExample() throws InterruptedException {
-        SimulationConfig config = new SimulationConfig(
+        GeoScenarioConfig config = new GeoScenarioConfig(
                 0.3575, 0.9838,              // circle center lat/lon, radians
                 6,                            // number of planes
                 230.0,                        // speed, m/s
@@ -75,7 +75,7 @@ public final class SimulationApp {
 
     /** Radars are static, so this only demonstrates placement (evenly spaced around a circle), not movement. */
     private static void runRadarExample() throws InterruptedException {
-        SimulationConfig config = new SimulationConfig(
+        GeoScenarioConfig config = new GeoScenarioConfig(
                 0.3575, 0.9838,              // circle center lat/lon, radians
                 4,                            // number of radars
                 230.0,                        // speed, m/s (ignored - radars never move)
@@ -88,14 +88,14 @@ public final class SimulationApp {
 
     /** Weather has no coordinates at all - no origin, no formation, just N independent readings. */
     private static void runWeatherExample() throws InterruptedException {
-        ValueSimulationConfig config = new ValueSimulationConfig(
+        NonGeoScenarioConfig config = new NonGeoScenarioConfig(
                 2,     // number of independent weather readings
                 1000   // publish interval, ms
         );
         runWeatherFor(config, 3_000);
     }
 
-    private static void runPlanesFor(SimulationConfig config, long millis) throws InterruptedException {
+    private static void runPlanesFor(GeoScenarioConfig config, long millis) throws InterruptedException {
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
         SimulationEngine<Plane> engine = SimulationEngine.create(config, MovementStyle.MOBILE,
                 NETWORK_API::send, Plane::new, ObjectWriters.PLANE, scheduler);
@@ -105,7 +105,7 @@ public final class SimulationApp {
         scheduler.shutdown();
     }
 
-    private static void runRadarsFor(SimulationConfig config, long millis) throws InterruptedException {
+    private static void runRadarsFor(GeoScenarioConfig config, long millis) throws InterruptedException {
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
         SimulationEngine<Radar> engine = SimulationEngine.create(config, MovementStyle.STATIC,
                 NETWORK_API::send, Radar::new, ObjectWriters.RADAR, scheduler);
@@ -115,7 +115,7 @@ public final class SimulationApp {
         scheduler.shutdown();
     }
 
-    private static void runWeatherFor(ValueSimulationConfig config, long millis) throws InterruptedException {
+    private static void runWeatherFor(NonGeoScenarioConfig config, long millis) throws InterruptedException {
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
         SimulationEngine<Weather> engine = SimulationEngine.createValueEngine(config,
                 NETWORK_API::send, Weather::new, ValueGenerators.WEATHER, scheduler);

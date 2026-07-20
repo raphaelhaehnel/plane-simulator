@@ -15,7 +15,7 @@ import java.util.Random;
 import java.util.function.Supplier;
 
 /**
- * Builds the initial formation from a {@link SimulationConfig}, dispatching on which
+ * Builds the initial formation from a {@link GeoScenarioConfig}, dispatching on which
  * {@link planesim.core.formation.FormationSpec} was chosen. Type-agnostic over the external object
  * type {@code T} — the same line/circle placement geometry works for any object, only the
  * per-tick {@link FlightBehavior} differs by {@link MovementStyle}.
@@ -32,7 +32,7 @@ public final class FormationPlanner {
      * @param objectFactory supplies one new externally-provided object instance per simulated
      *                      object (e.g. {@code Plane::new}, or a lambda that also assigns an id)
      */
-    static <T> List<SimulatedEntity<T>> buildFormation(SimulationConfig config, MovementStyle movementStyle,
+    static <T> List<SimulatedEntity<T>> buildFormation(GeoScenarioConfig config, MovementStyle movementStyle,
                                                          Supplier<T> objectFactory, ObjectWriter<T> writer) {
         if (config.formation() instanceof LineFormation line) {
             return buildLineFormation(config, line, movementStyle, objectFactory, writer);
@@ -51,7 +51,7 @@ public final class FormationPlanner {
      * own parallel line rather than converging onto a single destination point; a
      * {@link MovementStyle#STATIC} object just stays at its source point.
      */
-    private static <T> List<SimulatedEntity<T>> buildLineFormation(SimulationConfig config, LineFormation line,
+    private static <T> List<SimulatedEntity<T>> buildLineFormation(GeoScenarioConfig config, LineFormation line,
                                                                      MovementStyle movementStyle,
                                                                      Supplier<T> objectFactory, ObjectWriter<T> writer) {
         double originLatRad = config.originLatRad();
@@ -97,7 +97,7 @@ public final class FormationPlanner {
      * object then evolves via an independent random walk (see {@link CircleRandomWalkBehavior}), a
      * {@link MovementStyle#STATIC} object just stays put.
      */
-    private static <T> List<SimulatedEntity<T>> buildCircleFormation(SimulationConfig config, CircleFormation circle,
+    private static <T> List<SimulatedEntity<T>> buildCircleFormation(GeoScenarioConfig config, CircleFormation circle,
                                                                        MovementStyle movementStyle,
                                                                        Supplier<T> objectFactory, ObjectWriter<T> writer) {
         double originLatRad = config.originLatRad();

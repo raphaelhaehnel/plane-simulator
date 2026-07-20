@@ -6,6 +6,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import planesim.core.scenario.ScenarioLimitExceededException;
 import planesim.core.server.dto.ErrorResponse;
 
 import java.io.IOException;
@@ -33,9 +34,11 @@ abstract class AbstractJsonHandler implements HttpHandler {
             handleRequest(exchange, GSON);
         } catch (BadRequestException | IllegalArgumentException | NullPointerException | JsonSyntaxException e) {
             writeJson(exchange, 400, new ErrorResponse(e.getMessage() != null ? e.getMessage() : "Invalid request"));
+        } catch (ScenarioLimitExceededException e) {
+            writeJson(exchange, 429, new ErrorResponse(e.getMessage()));
         } catch (RuntimeException e) {
             // Matches SimulationEngine.tick()'s "never let an exception escape silently" convention.
-            e.printStackTrace();
+            log.error("Unexpected error handling {} {}", exchange.getRequestMethod(), exchange.getRequestURI(), e);
             writeJson(exchange, 500, new ErrorResponse("Internal server error"));
         } finally {
             exchange.close();

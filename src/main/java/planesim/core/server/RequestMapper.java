@@ -1,8 +1,8 @@
 package planesim.core.server;
 
+import planesim.core.engine.GeoScenarioConfig;
+import planesim.core.engine.NonGeoScenarioConfig;
 import planesim.core.engine.ScenarioConfig;
-import planesim.core.engine.SimulationConfig;
-import planesim.core.engine.ValueSimulationConfig;
 import planesim.core.formation.CircleFormation;
 import planesim.core.formation.FormationSpec;
 import planesim.core.formation.LineFormation;
@@ -15,13 +15,14 @@ import planesim.core.server.dto.FormationDto;
 import planesim.core.server.dto.GeoStateDto;
 import planesim.core.server.dto.NonGeoStateDto;
 import planesim.core.server.dto.ScenarioDto;
+import planesim.core.server.dto.ScenarioIdRequest;
 
 import java.util.Locale;
 
 /**
  * Converts between the HTTP-facing DTOs and the internal domain model. Validation here is limited
  * to what the domain types can't check themselves (missing/absent fields, unknown formation type);
- * range checks that {@link SimulationConfig}/{@link ValueSimulationConfig}/{@link LineFormation}/
+ * range checks that {@link GeoScenarioConfig}/{@link NonGeoScenarioConfig}/{@link LineFormation}/
  * {@link CircleFormation} already enforce in their compact constructors (e.g. objectCount &gt; 0,
  * spacing/radius &gt;= 0) are left to those constructors rather than duplicated here.
  */
@@ -44,15 +45,23 @@ public final class RequestMapper {
         }
     }
 
-    /** Dispatches on {@code type} to build the matching {@link ScenarioConfig} kind: geographic for PLANE/RADAR, non-geographic for WEATHER. */
+    /** Dispatches on {@code type}'s category to build the matching {@link ScenarioConfig} kind. */
     public static ScenarioConfig toScenarioConfig(ScenarioType type, CreateScenarioRequest req) {
-        return switch (type) {
-            case PLANE, RADAR -> toSimulationConfig(req);
-            case WEATHER -> toValueSimulationConfig(req);
+        return switch (type.category()) {
+            case GEOGRAPHIC -> toGeoScenarioConfig(req);
+            case NON_GEOGRAPHIC -> toNonGeoScenarioConfig(req);
         };
     }
 
-    private static SimulationConfig toSimulationConfig(CreateScenarioRequest req) {
+    /** Returns {@code request.id}, or throws {@link BadRequestException} if it's missing/blank. */
+    public static String requireScenarioId(ScenarioIdRequest request) {
+        if (request.id == null || request.id.isBlank()) {
+            throw new BadRequestException("id is required");
+        }
+        return request.id;
+    }
+
+    private static GeoScenarioConfig toGeoScenarioConfig(CreateScenarioRequest req) {
         if (req.originLatRad == null || req.originLonRad == null) {
             throw new BadRequestException("originLatRad and originLonRad are required");
         }
@@ -62,12 +71,12 @@ public final class RequestMapper {
         FormationSpec formationSpec = toFormationSpec(req.formation);
         double speed = req.speed != null ? req.speed : DEFAULT_SPEED_MPS;
         double altitude = req.altitude != null ? req.altitude : DEFAULT_ALTITUDE_M;
-        return new SimulationConfig(req.originLatRad, req.originLonRad, req.amount, speed, altitude,
+        return new GeoScenarioConfig(req.originLatRad, req.originLonRad, req.amount, speed, altitude,
                 req.sendInterval, formationSpec);
     }
 
-    private static ValueSimulationConfig toValueSimulationConfig(CreateScenarioRequest req) {
-        return new ValueSimulationConfig(req.amount, req.sendInterval);
+    private static NonGeoScenarioConfig toNonGeoScenarioConfig(CreateScenarioRequest req) {
+        return new NonGeoScenarioConfig(req.amount, req.sendInterval);
     }
 
     private static FormationSpec toFormationSpec(FormationDto dto) {
@@ -97,14 +106,14 @@ public final class RequestMapper {
         dto.amount = config.objectCount();
         dto.sendInterval = config.publishIntervalMs();
 
-        if (config instanceof SimulationConfig geo) {
+        if (config instanceof GeoScenarioConfig geo) {
             dto.originLatRad = geo.originLatRad();
             dto.originLonRad = geo.originLonRad();
             dto.speed = geo.speedMps();
             dto.altitude = geo.altitudeMeters();
             dto.formation = toFormationDto(geo.formation());
             dto.geoObjects = scenario.liveGeoSnapshot().stream().map(RequestMapper::toGeoDto).toList();
-        } else if (config instanceof ValueSimulationConfig) {
+        } else if (config instanceof NonGeoScenarioConfig) {
             dto.nonGeoObjects = scenario.liveNonGeoSnapshot().stream().map(RequestMapper::toNonGeoDto).toList();
         }
         return dto;

@@ -4,8 +4,8 @@ import com.google.gson.Gson;
 import com.sun.net.httpserver.HttpExchange;
 import planesim.core.scenario.ScenarioManager;
 import planesim.core.server.dto.ErrorResponse;
-import planesim.core.server.dto.IdRequest;
-import planesim.core.server.dto.StartPauseResponse;
+import planesim.core.server.dto.ScenarioIdRequest;
+import planesim.core.server.dto.ScenarioStatusResponse;
 
 import java.io.IOException;
 
@@ -25,11 +25,12 @@ final class StartScenarioHandler extends AbstractJsonHandler {
 
     @Override
     void handleRequest(HttpExchange exchange, Gson gson) throws IOException {
-        IdRequest request = readBody(exchange, gson, IdRequest.class);
-        if (!manager.start(request.id)) {
-            writeJson(exchange, 404, new ErrorResponse("scenario not found: " + request.id));
+        ScenarioIdRequest request = readBody(exchange, gson, ScenarioIdRequest.class);
+        String id = RequestMapper.requireScenarioId(request);
+        if (!manager.start(id)) {
+            writeJson(exchange, 404, new ErrorResponse("scenario not found: " + id));
             return;
         }
-        writeJson(exchange, 200, new StartPauseResponse(request.id, "RUNNING"));
+        writeJson(exchange, 200, new ScenarioStatusResponse(id, "RUNNING"));
     }
 }

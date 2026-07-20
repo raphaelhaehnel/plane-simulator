@@ -15,7 +15,7 @@ import planesim.core.formation.LineFormation;
  * want per-object speed/altitude later, swap those two fields for a per-index supplier; nothing
  * else in the design needs to change.
  */
-public record SimulationConfig(
+public record GeoScenarioConfig(
         double originLatRad,
         double originLonRad,
         int objectCount,
@@ -24,9 +24,20 @@ public record SimulationConfig(
         long publishIntervalMs,
         FormationSpec formation
 ) implements ScenarioConfig {
-    public SimulationConfig {
+
+    /**
+     * Below this, {@code 1 / cos(originLatRad)} in {@code GeoMath.toLocal}/{@code toLatLon} blows
+     * up toward infinity — the flat equirectangular projection this simulator uses isn't valid
+     * within ~{@code arccos(MIN_COS_LATITUDE)} of the poles.
+     */
+    private static final double MIN_COS_LATITUDE = 0.01;
+
+    public GeoScenarioConfig {
         if (objectCount <= 0) {
             throw new IllegalArgumentException("objectCount must be positive");
+        }
+        if (objectCount > MAX_OBJECT_COUNT) {
+            throw new IllegalArgumentException("objectCount must not exceed " + MAX_OBJECT_COUNT);
         }
         if (speedMps <= 0) {
             throw new IllegalArgumentException("speedMps must be positive");
@@ -36,6 +47,11 @@ public record SimulationConfig(
         }
         if (formation == null) {
             throw new IllegalArgumentException("formation must not be null");
+        }
+        if (Math.abs(Math.cos(originLatRad)) < MIN_COS_LATITUDE) {
+            throw new IllegalArgumentException(
+                    "originLatRad is too close to a pole for this simulator's flat-earth (equirectangular) "
+                            + "projection to stay accurate: " + originLatRad + " rad");
         }
     }
 }

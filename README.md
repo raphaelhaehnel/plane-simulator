@@ -116,5 +116,6 @@ curl -X POST http://localhost:8080/createScenario -H "Content-Type: application/
 
 ## Errors
 
-`400` invalid request, `404` unknown scenario id, `405` wrong HTTP method — body is
-`{ "error": "..." }`.
+`400` invalid request (including a missing/blank `id`, an `amount` over 10,000, or an
+`originLatRad` too close to a pole), `404` unknown scenario id, `405` wrong HTTP method, `429` too
+many concurrent scenarios (100 max — delete one first) — body is `{ "error": "..." }`.

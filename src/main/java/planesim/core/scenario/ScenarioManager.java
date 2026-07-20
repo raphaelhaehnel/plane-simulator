@@ -1,18 +1,12 @@
 package planesim.core.scenario;
 
-import planesim.external.Plane;
-import planesim.external.Radar;
-import planesim.external.Weather;
-import planesim.core.engine.MovementStyle;
-import planesim.core.engine.ObjectWriters;
 import planesim.core.engine.ScenarioConfig;
-import planesim.core.engine.SimulationConfig;
 import planesim.core.engine.SimulationEngine;
-import planesim.core.engine.ValueGenerators;
-import planesim.core.engine.ValueSimulationConfig;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
@@ -25,31 +19,41 @@ import java.util.concurrent.ScheduledExecutorService;
  */
 public final class ScenarioManager {
 
+    /** Upper bound on concurrently-registered scenarios — protects against unbounded resource growth. */
+    public static final int MAX_SCENARIOS = 100;
+
     private final ConcurrentHashMap<String, Scenario> scenarios = new ConcurrentHashMap<>();
     private final ScheduledExecutorService sharedScheduler;
+    private final Map<ScenarioType, ScenarioEngineFactory> engineFactories;
 
-    public ScenarioManager(ScheduledExecutorService sharedScheduler) {
+    public ScenarioManager(ScheduledExecutorService sharedScheduler, Map<ScenarioType, ScenarioEngineFactory> engineFactories) {
         this.sharedScheduler = sharedScheduler;
+        this.engineFactories = new EnumMap<>(engineFactories);
+        for (ScenarioType type : ScenarioType.values()) {
+            if (!this.engineFactories.containsKey(type)) {
+                throw new IllegalStateException("No engine factory registered for scenario type: " + type);
+            }
+        }
     }
 
     /**
      * Creates and registers a new scenario in {@link ScenarioStatus#CREATED} state. Does not start
-     * it. Dispatches on {@code type} to pick the right external object class, its {@link
-     * planesim.core.engine.ObjectWriter}/{@link planesim.core.engine.ValueGenerator}, and (for geographic types)
-     * its {@link MovementStyle} (planes fly, radars stay put). {@code config} must be the matching
-     * {@link ScenarioConfig} kind for {@code type} — {@link RequestMapper} guarantees that.
+     * it. Dispatches on {@code type} via the {@link ScenarioEngineFactory} supplied at
+     * construction — adding a new {@link ScenarioType} only requires registering its factory, not
+     * editing this class. {@code config} must be the matching {@link ScenarioConfig} kind for
+     * {@code type} — {@link RequestMapper} guarantees that.
+     *
+     * @throws ScenarioLimitExceededException if {@link #MAX_SCENARIOS} scenarios are already registered
      */
     public Scenario createScenario(ScenarioType type, ScenarioConfig config) {
+        if (scenarios.size() >= MAX_SCENARIOS) {
+            throw new ScenarioLimitExceededException(
+                    "Maximum number of concurrent scenarios (" + MAX_SCENARIOS + ") reached; delete an existing one first");
+        }
         String id = UUID.randomUUID().toString();
         ScenarioNetworkApi networkApi = new ScenarioNetworkApi();
-        SimulationEngine<?> engine = switch (type) {
-            case PLANE -> SimulationEngine.<Plane>create((SimulationConfig) config, MovementStyle.MOBILE,
-                    networkApi::send, Plane::new, ObjectWriters.PLANE, sharedScheduler);
-            case RADAR -> SimulationEngine.<Radar>create((SimulationConfig) config, MovementStyle.STATIC,
-                    networkApi::send, Radar::new, ObjectWriters.RADAR, sharedScheduler);
-            case WEATHER -> SimulationEngine.<Weather>createValueEngine((ValueSimulationConfig) config,
-                    networkApi::send, Weather::new, ValueGenerators.WEATHER, sharedScheduler);
-        };
+        ScenarioEngineFactory factory = engineFactories.get(type);
+        SimulationEngine<?> engine = factory.createEngine(config, networkApi, sharedScheduler);
         Scenario scenario = new Scenario(id, type, config, engine, networkApi);
         scenarios.put(id, scenario);
         return scenario;

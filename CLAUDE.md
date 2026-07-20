@@ -52,14 +52,17 @@ any scenario whose `geoObjects` field is null); it never gains a way to visualiz
 object like weather — there's nothing to plot.
 
 Coordinates on every *geographic* simulated object (`Plane.latitude`/`longitude`,
-`Radar.latitude`/`longitude`, and everywhere upstream of them: `SimulationConfig`, `LineFormation`,
+`Radar.latitude`/`longitude`, and everywhere upstream of them: `GeoScenarioConfig`, `LineFormation`,
 `CircleFormation`) **must stay WGS84 radians** — that's the format the real external types require,
 so it's not a local choice to change. Local meters (`Vector2`, the flat frame) exist only as an
 internal computation detail behind `GeoMath.toLocal`/`toLatLon`; they must never leak into the
-public/external-facing data (`Plane`, `Radar`, `SimulationConfig`, `FormationSpec`
+public/external-facing data (`Plane`, `Radar`, `GeoScenarioConfig`, `FormationSpec`
 implementations). `Weather` has no coordinates at all — it's a genuinely different, non-geographic
 kind of object (see "Adding a new object type" and the Architecture section) and none of the
-coordinate-frame conventions apply to it, or to any future non-geographic type.
+coordinate-frame conventions apply to it, or to any future non-geographic type. Because the
+projection is a flat equirectangular approximation, `GeoScenarioConfig`'s compact constructor also
+rejects an `originLatRad` too close to a pole, where `Math.cos(originLatRad)` would blow the
+projection up toward infinity.
 
 ## Build / run
 
@@ -142,8 +145,10 @@ question that matters is: does the new type have coordinates (geographic) or not
    `StaticBehavior` regardless of formation shape. If neither fits, add a new `FlightBehavior`
    implementation and wire it into `planesim.core.engine.FormationPlanner`'s
    `movementStyle == ...` branches.
-4. Wire it into `planesim.core.scenario.ScenarioManager.createScenario`'s `switch` via
-   `SimulationEngine.create(...)`.
+4. Add `ScenarioType.YOUR_TYPE(ScenarioCategory.GEOGRAPHIC)` and one constant to
+   `planesim.core.scenario.ScenarioEngineFactories` (+ its `DEFAULTS` map) that calls
+   `SimulationEngine.create(...)` with your `ObjectWriter` and `MovementStyle`.
+   `ScenarioManager` itself never needs to change.
 5. In `planesim.core.scenario.ScenarioNetworkApi`, add a `send(YourType obj)` override that
    records into the existing `latestGeoByIndex` map via a new `GeoLiveState` (same shape as
    plane/radar — just lat/lon/heading, nothing new to define).
@@ -152,8 +157,9 @@ question that matters is: does the new type have coordinates (geographic) or not
 1. Add the placeholder class to `planesim.external` and a `send(...)` overload to `NetworkApi`.
 2. Add a predefined `ValueGenerator<YourType>` constant to `planesim.core.engine.ValueGenerators`
    — this produces each tick's field values directly (no position/velocity involved at all).
-3. Wire it into `ScenarioManager.createScenario`'s `switch` via
-   `SimulationEngine.createValueEngine(...)`.
+3. Add `ScenarioType.YOUR_TYPE(ScenarioCategory.NON_GEOGRAPHIC)` and one constant to
+   `planesim.core.scenario.ScenarioEngineFactories` (+ its `DEFAULTS` map) that calls
+   `SimulationEngine.createValueEngine(...)`. `ScenarioManager` itself never needs to change.
 4. In `ScenarioNetworkApi`, add a `send(YourType obj)` override that's a **one-line delegation to
    the existing `recordNonGeo(obj)`** — that's it. No new record, no new DTO, no new
    `RequestMapper` branch. `NonGeoLiveState`/`NonGeoStateDto` are already generic (a
@@ -162,8 +168,10 @@ question that matters is: does the new type have coordinates (geographic) or not
 5. **Don't** add it to `planesim.view.ui` — the UI only ever renders geographic objects, by design
    (see "What this is" above).
 
-In both cases, add a `ScenarioType` value if you want it reachable over HTTP — `RequestMapper.
-toScenarioType` picks it up automatically via `ScenarioType.valueOf`.
+In both cases, `ScenarioType`'s `category()` is what `RequestMapper.toScenarioConfig` dispatches
+on to decide between building a `GeoScenarioConfig` or `NonGeoScenarioConfig`, so once the category
+is set correctly the new type is reachable over HTTP automatically — no `RequestMapper` change
+needed either.
 
 ## Package structure
 
@@ -171,11 +179,12 @@ toScenarioType` picks it up automatically via `ScenarioType.valueOf`.
 planesim.core                    all logic + the HTTP API — what ships to the real environment
   planesim.core.engine             SimulationEngine, SimulatedObject/SimulatedValue/SimulatedEntity,
                                     ObjectWriter(s), ValueGenerator(s), MovementStyle, FormationPlanner,
-                                    SimulationConfig, ValueSimulationConfig, ScenarioConfig
+                                    GeoScenarioConfig, NonGeoScenarioConfig, ScenarioConfig
   planesim.core.behavior           FlightBehavior + LineBounceBehavior/CircleRandomWalkBehavior/StaticBehavior
   planesim.core.formation          FormationSpec, LineFormation, CircleFormation
   planesim.core.geo                Vector2, GeoMath
-  planesim.core.scenario           ScenarioType/Status, GeoLiveState, NonGeoLiveState(+FieldReader),
+  planesim.core.scenario           ScenarioType/Status/Category, GeoLiveState, NonGeoLiveState(+FieldReader),
+                                    ScenarioEngineFactory(ies), ScenarioLimitExceededException,
                                     ScenarioNetworkApi, Scenario, ScenarioManager
   planesim.core.server              SimulationServerApp, com.sun.net.httpserver handlers, RequestMapper
   planesim.core.server.dto          JSON wire-format DTOs
@@ -205,7 +214,7 @@ Within each subpackage, the same visibility convention holds as before the reorg
 Java visibility doesn't reach across packages, a few types are `public` purely so a sibling
 subpackage can consume them (`FlightBehavior`, `StepResult`, `LineBounceBehavior`,
 `CircleRandomWalkBehavior`, `StaticBehavior` in `core.behavior`; `SimulationEngine`,
-`ScenarioConfig`, `MovementStyle`, `ObjectWriter`, `ObjectWriters`, `ValueSimulationConfig`,
+`ScenarioConfig`, `MovementStyle`, `ObjectWriter`, `ObjectWriters`, `NonGeoScenarioConfig`,
 `ValueGenerator`, `ValueGenerators` in `core.engine`). Types only ever constructed by a class in
 their own package kept their package-private visibility: `SimulatedEntity`/`SimulatedObject`/
 `SimulatedValue` (all in `core.engine`), `MapPanel`/`PlaneSnapshot` (in `view.ui`), and
@@ -214,7 +223,7 @@ their own package kept their package-private visibility: `SimulatedEntity`/`Simu
 ## Architecture
 
 **Two coordinate frames** (geographic objects only). All physics happens in a local flat frame in
-meters (x = east, y = north) via `Vector2`, centered on `SimulationConfig.originLatRad/originLonRad`.
+meters (x = east, y = north) via `Vector2`, centered on `GeoScenarioConfig.originLatRad/originLonRad`.
 Lat/lon (always radians) only exists at the boundary: `GeoMath.toLocal`/`toLatLon` convert on the
 way in and out. This is because vx/vy are linear (m/s) and lat/lon are angular — they can't be
 mixed directly. The projection is a simple equirectangular ("plate carrée") approximation, fine at
@@ -264,11 +273,20 @@ an orphaned in-flight tick from the cancelled chain is still running). Whoever c
 `ScheduledExecutorService` owns shutting it down — the engine never does.
 
 **Multiple concurrent scenarios.** `ScenarioManager` (in `core.scenario`) is the thread-safe
-registry behind the HTTP API: `createScenario` `switch`es on `ScenarioType` to pick the object
-class, the matching `ObjectWriters`/`ValueGenerators` constant, and — for geographic types — the
-matching `MovementStyle` (`PLANE` → `MOBILE`, `RADAR` → `STATIC`; `WEATHER` skips `MovementStyle`
-entirely and goes through `createValueEngine`), then builds a `SimulationEngine<?>` on the
-manager's shared pool plus a `ScenarioNetworkApi`.
+registry behind the HTTP API. It never references `Plane`/`Radar`/`Weather` or any other concrete
+object type directly — it's handed a `Map<ScenarioType, ScenarioEngineFactory>` at construction
+(`ScenarioEngineFactories.DEFAULTS`, built in `SimulationServerApp.main()`) and validates every
+`ScenarioType` has a registered factory up front (fails fast at startup, not on the first request
+for a type). `createScenario` looks up the matching `ScenarioEngineFactory` and calls its
+`createEngine(config, networkApi, scheduler)`, which is where the object-class/`ObjectWriters`
+`ValueGenerators`/`MovementStyle` choice actually lives (one factory constant per `ScenarioType` in
+`ScenarioEngineFactories`, e.g. `PLANE` → `MovementStyle.MOBILE` + `ObjectWriters.PLANE`, `RADAR` →
+`MovementStyle.STATIC` + `ObjectWriters.RADAR`, `WEATHER` → `createValueEngine` +
+`ValueGenerators.WEATHER`) — adding a future `ScenarioType` means adding one factory constant here,
+never touching `ScenarioManager` (see "Adding a new object type" above). `createScenario` also
+enforces `MAX_SCENARIOS` (100), throwing `ScenarioLimitExceededException` (mapped to HTTP 429 by
+`AbstractJsonHandler`) once reached — a soft, approximate cap (the check-then-put isn't atomic
+under concurrent creates), meant only to stop unbounded growth, not to be a precise quota.
 
 **`ScenarioNetworkApi` and the generic non-geographic live-state capture.** It implements every
 `NetworkApi` overload (a scenario is always homogeneous, so only one is ever actually exercised per
@@ -342,23 +360,28 @@ involved.
 **HTTP API.** `SimulationServerApp` (in `core.server`) wires six `com.sun.net.httpserver` handlers
 (one per endpoint: `POST /createScenario`, `GET /getScenarios`, `POST /deleteScenario`, `POST
 /start`, `POST /pause`, `POST /stopAll`) over a `ScenarioManager`, on top of one shared
-`Executors.newScheduledThreadPool(...)` for scenario ticking, separate from the pool that serves
-incoming HTTP requests. `AbstractJsonHandler` centralizes method checking, a Log4j2 INFO log line
-for every request received (method + URI, logged unconditionally before dispatch, so it fires even
-for requests that end up 4xx/5xx), JSON body (de)serialization (Gson), and mapping exceptions to
-status codes: `400` for `BadRequestException`/`IllegalArgumentException`/`NullPointerException`/
-`JsonSyntaxException` (this is how `SimulationConfig`/`ValueSimulationConfig`/`LineFormation`/
-`CircleFormation`'s own compact-constructor validation surfaces as a 400 without `RequestMapper`
-duplicating those checks), `404` for an unknown scenario id, `405` for the wrong verb, `500` for
-anything else. Coordinates in the JSON API are radians, matching the internal representation
-exactly — no conversion at this boundary. `createScenario`'s `type` field accepts `"PLANE"`,
-`"RADAR"`, or `"WEATHER"` (`RequestMapper.toScenarioType` maps via `ScenarioType.valueOf`, so a new
-`ScenarioType` value becomes acceptable automatically); `RequestMapper.toScenarioConfig` then
-dispatches on `type` to build either a `SimulationConfig` (PLANE/RADAR — requires
-`originLatRad`/`originLonRad`/`formation`) or a `ValueSimulationConfig` (WEATHER — just
-`amount`/`sendInterval`, no origin/formation needed or read even if the caller sends them anyway).
-`speed`/`altitude` default to 230.0/10000.0 when omitted and are harmless-but-unused for a `RADAR`
-scenario (`StaticBehavior` never applies velocity regardless of `SimulationConfig.speedMps`) and
+bounded `Executors.newFixedThreadPool(HTTP_HANDLER_THREADS)` (64 threads — bounded deliberately, so
+a burst of requests can't grow the request-handling pool without limit) that serves incoming HTTP
+requests, separate from the scheduled pool used for scenario ticking. `AbstractJsonHandler`
+centralizes method checking, a Log4j2 INFO log line for every request received (method + URI,
+logged unconditionally before dispatch, so it fires even for requests that end up 4xx/5xx), JSON
+body (de)serialization (Gson), and mapping exceptions to status codes: `400` for
+`BadRequestException`/`IllegalArgumentException`/`NullPointerException`/`JsonSyntaxException` (this
+is how `GeoScenarioConfig`/`NonGeoScenarioConfig`/`LineFormation`/`CircleFormation`'s own
+compact-constructor validation surfaces as a 400 without `RequestMapper` duplicating those checks),
+`429` for `ScenarioLimitExceededException` (the request itself is valid, the server is just out of
+scenario capacity), `404` for an unknown scenario id, `405` for the wrong verb, `500` for anything
+else (logged via Log4j2's `log.error`, not a raw stack trace). Coordinates in the JSON API are
+radians, matching the internal representation exactly — no conversion at this boundary.
+`createScenario`'s `type` field accepts `"PLANE"`, `"RADAR"`, or `"WEATHER"` (`RequestMapper.
+toScenarioType` maps via `ScenarioType.valueOf`, so a new `ScenarioType` value becomes acceptable
+automatically); `RequestMapper.toScenarioConfig` then dispatches on `type.category()` to build
+either a `GeoScenarioConfig` (`GEOGRAPHIC` — requires `originLatRad`/`originLonRad`/`formation`,
+and rejects an `amount` above `ScenarioConfig.MAX_OBJECT_COUNT` or an `originLatRad` too close to a
+pole) or a `NonGeoScenarioConfig` (`NON_GEOGRAPHIC` — just `amount`/`sendInterval`, no
+origin/formation needed or read even if the caller sends them anyway). `speed`/`altitude` default
+to 230.0/10000.0 when omitted and are harmless-but-unused for a `RADAR` scenario (`StaticBehavior`
+never applies velocity regardless of `GeoScenarioConfig.speedMps`) and
 entirely absent from a `WEATHER` scenario's config. In `RequestMapper.toDto`, geographic fields
 (`originLatRad`/`originLonRad`/`speed`/`altitude`/`formation`/`geoObjects`) on `ScenarioDto` are
 boxed (`Double`) and left `null` — which Gson serializes as an absent field, not `0.0` — for a
@@ -386,10 +409,12 @@ would be sub-pixel on any real map projection. Poll-thread UI mutations are wrap
 
 - Log4j2 (`LogManager.getLogger(...)`, console appender only, configured in
   `src/main/resources/log4j2.xml`) is used for **backend logging only** — `planesim.core.engine`
-  (object-sent-to-`NetworkApi` events) and `planesim.core.server` (HTTP requests received). Nothing
-  in `planesim.view.ui` logs anything; keep it that way, the UI is view-only scaffolding, not a
-  place to grow observability.
-- Angles in the public data model (`Plane`, `Radar`, `SimulationConfig`, `LineFormation`,
+  (object-sent-to-`NetworkApi` events at INFO, uncaught tick exceptions at ERROR) and
+  `planesim.core.server` (HTTP requests received at INFO, unexpected 500s at ERROR). Nothing in
+  `planesim.view.ui` logs anything; keep it that way, the UI is view-only scaffolding, not a place
+  to grow observability. Don't reintroduce `e.printStackTrace()` for error paths — use the class's
+  `Logger` so errors go through the same configured appender/format as everything else.
+- Angles in the public data model (`Plane`, `Radar`, `GeoScenarioConfig`, `LineFormation`,
   `CircleFormation`) are radians, all the way out through the JSON HTTP API — there is currently no
   place in this codebase that accepts degrees from a human (the old Swing config form that used to
   convert degrees at its boundary via `Math.toRadians`/`toDegrees` was removed when the UI became
@@ -403,11 +428,12 @@ would be sub-pixel on any real map projection. Poll-thread UI mutations are wrap
   implementations, or `core.scenario` building `core.engine` engines) have to be `public` — that's
   a Java visibility constraint, not license to make everything public; see "Package structure"
   above for which types are public out of necessity vs. by design.
-- Records (`Vector2`, `StepResult`, `PlaneSnapshot`, `SimulationConfig`, `ValueSimulationConfig`,
+- Records (`Vector2`, `StepResult`, `PlaneSnapshot`, `GeoScenarioConfig`, `NonGeoScenarioConfig`,
   `LineFormation`, `CircleFormation`, `GeoLiveState`, `NonGeoLiveState`) are used for immutable
-  internal value types; compact constructors validate invariants (e.g. `SimulationConfig`,
-  `ValueSimulationConfig`, `LineFormation`, `CircleFormation` reject negative/non-positive values;
-  `NonGeoLiveState` wraps its field map unmodifiable). The HTTP API's wire-format types
+  internal value types; compact constructors validate invariants (e.g. `GeoScenarioConfig`,
+  `NonGeoScenarioConfig`, `LineFormation`, `CircleFormation` reject negative/non-positive values and
+  an `objectCount` above `ScenarioConfig.MAX_OBJECT_COUNT`; `GeoScenarioConfig` additionally rejects
+  a near-pole `originLatRad`; `NonGeoLiveState` wraps its field map unmodifiable). The HTTP API's wire-format types
   (`planesim.core.server.dto.*`) are the one deliberate exception — plain public classes with
   public fields, not records, since they're unvalidated JSON transfer objects (validation happens
   once, explicitly, in `RequestMapper`) and Gson deserialization of absent/optional JSON fields is
@@ -427,7 +453,7 @@ would be sub-pixel on any real map projection. Poll-thread UI mutations are wrap
   function. Keep it that way: don't add object-specific fields to these types, and don't name a new
   live-state/DTO type after the object it happens to be introduced for.
 - Not every object is geographic — don't assume a `ScenarioConfig`/external object has lat/lon/a
-  formation. Check with `instanceof SimulationConfig` (see `RequestMapper.toDto`) rather than
+  formation. Check with `instanceof GeoScenarioConfig` (see `RequestMapper.toDto`) rather than
   casting unconditionally, and never add coordinate fields to `Weather` or a future non-geographic
   type just for consistency with `Plane`/`Radar`.
 - **Never let `planesim.core` depend on `planesim.view`.** The whole point of the package split is

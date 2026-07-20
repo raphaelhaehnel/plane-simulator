@@ -71,7 +71,7 @@ public final class SimulationEngine<T> {
      * @param scheduler     the (possibly shared) executor this engine's ticks will run on; the
      *                      engine never shuts it down — that's the caller's responsibility
      */
-    public static <T> SimulationEngine<T> create(SimulationConfig config, MovementStyle movementStyle,
+    public static <T> SimulationEngine<T> create(GeoScenarioConfig config, MovementStyle movementStyle,
                                                    Consumer<T> sink, Supplier<T> objectFactory,
                                                    ObjectWriter<T> writer, ScheduledExecutorService scheduler) {
         List<SimulatedEntity<T>> items = FormationPlanner.buildFormation(config, movementStyle, objectFactory, writer);
@@ -92,7 +92,7 @@ public final class SimulationEngine<T> {
      * @param scheduler     the (possibly shared) executor this engine's ticks will run on; the
      *                      engine never shuts it down — that's the caller's responsibility
      */
-    public static <T> SimulationEngine<T> createValueEngine(ValueSimulationConfig config, Consumer<T> sink,
+    public static <T> SimulationEngine<T> createValueEngine(NonGeoScenarioConfig config, Consumer<T> sink,
                                                               Supplier<T> objectFactory, ValueGenerator<T> generator,
                                                               ScheduledExecutorService scheduler) {
         List<SimulatedEntity<T>> items = new ArrayList<>(config.objectCount());
@@ -136,8 +136,7 @@ public final class SimulationEngine<T> {
             }
         } catch (RuntimeException e) {
             // scheduleAtFixedRate silently stops forever if a task throws, so never let one escape.
-            // TODO: replace with your real logging.
-            e.printStackTrace();
+            log.error("Uncaught exception during tick", e);
         }
     }
 }

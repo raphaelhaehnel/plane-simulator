@@ -1,6 +1,7 @@
 package planesim.core.server;
 
 import com.sun.net.httpserver.HttpServer;
+import planesim.core.scenario.ScenarioEngineFactories;
 import planesim.core.scenario.ScenarioManager;
 
 import java.io.IOException;
@@ -19,12 +20,15 @@ public final class SimulationServerApp {
 
     private static final int DEFAULT_PORT = 8080;
 
+    /** Bounded so a burst of requests can't grow the HTTP request-handling pool without limit. */
+    private static final int HTTP_HANDLER_THREADS = 64;
+
     public static void main(String[] args) throws IOException {
         int port = args.length > 0 ? Integer.parseInt(args[0]) : DEFAULT_PORT;
 
         ScheduledExecutorService scenarioScheduler = Executors.newScheduledThreadPool(
                 Math.max(4, Runtime.getRuntime().availableProcessors()));
-        ScenarioManager manager = new ScenarioManager(scenarioScheduler);
+        ScenarioManager manager = new ScenarioManager(scenarioScheduler, ScenarioEngineFactories.DEFAULTS);
 
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/createScenario", new CreateScenarioHandler(manager));
@@ -33,7 +37,7 @@ public final class SimulationServerApp {
         server.createContext("/start", new StartScenarioHandler(manager));
         server.createContext("/pause", new PauseScenarioHandler(manager));
         server.createContext("/stopAll", new StopAllScenariosHandler(manager));
-        server.setExecutor(Executors.newCachedThreadPool());
+        server.setExecutor(Executors.newFixedThreadPool(HTTP_HANDLER_THREADS));
         server.start();
 
         System.out.println("SimulationServer listening on http://localhost:" + port);
