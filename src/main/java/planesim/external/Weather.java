@@ -10,7 +10,7 @@ package planesim.external;
  * to change. Unlike {@link Plane}/{@link Radar}, a weather reading has no coordinates at all —
  * it isn't a positioned object, can't be placed by a formation, and can't be shown on a map.
  */
-public class Weather {
+public class Weather extends Entity {
     public double windVelocity;  // m/s
     public float temperature;    // degrees Celsius
     public boolean isSunny;

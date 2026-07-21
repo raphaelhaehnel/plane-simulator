@@ -6,7 +6,7 @@ import java.util.Map;
 
 /**
  * Latest published reading of one non-geographic object (weather, ...) within a scenario, as last
- * observed via {@link ScenarioNetworkApi}. Unlike {@link GeoLiveState} — always the same
+ * observed via {@link ScenarioPublisher}. Unlike {@link GeoLiveState} — always the same
  * lat/lon/heading shape — a non-geographic object's fields are arbitrary and type-specific, so
  * they're captured generically (via reflection, see {@link NonGeoFieldReader}) into a
  * name-&gt;value map rather than a hand-written record per type. This is what lets a brand new

@@ -10,7 +10,7 @@ package planesim.external;
  * to change. Unlike {@link Plane}, a radar is static: it has no velocity/heading fields because
  * it never moves.
  */
-public class Radar {
+public class Radar extends Entity {
     public double altitude;
     public double latitude;   // radians
     public double longitude;  // radians

@@ -2,6 +2,7 @@ package planesim.core.scenario;
 
 import planesim.core.engine.ScenarioConfig;
 import planesim.core.engine.SimulationEngine;
+import planesim.external.NetworkManager;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -25,9 +26,18 @@ public final class ScenarioManager {
     private final ConcurrentHashMap<String, Scenario> scenarios = new ConcurrentHashMap<>();
     private final ScheduledExecutorService sharedScheduler;
     private final Map<ScenarioType, ScenarioEngineFactory> engineFactories;
+    private final NetworkManager network;
 
-    public ScenarioManager(ScheduledExecutorService sharedScheduler, Map<ScenarioType, ScenarioEngineFactory> engineFactories) {
+    /**
+     * @param network the single {@link NetworkManager} every scenario publishes through — injected
+     *                rather than looked up via {@code getInstance()} so this class stays
+     *                independent of how the singleton is installed
+     */
+    public ScenarioManager(ScheduledExecutorService sharedScheduler,
+                           Map<ScenarioType, ScenarioEngineFactory> engineFactories,
+                           NetworkManager network) {
         this.sharedScheduler = sharedScheduler;
+        this.network = network;
         this.engineFactories = new EnumMap<>(engineFactories);
         for (ScenarioType type : ScenarioType.values()) {
             if (!this.engineFactories.containsKey(type)) {
@@ -51,10 +61,10 @@ public final class ScenarioManager {
                     "Maximum number of concurrent scenarios (" + MAX_SCENARIOS + ") reached; delete an existing one first");
         }
         String id = UUID.randomUUID().toString();
-        ScenarioNetworkApi networkApi = new ScenarioNetworkApi();
+        ScenarioPublisher publisher = new ScenarioPublisher(network, type.topicName());
         ScenarioEngineFactory factory = engineFactories.get(type);
-        SimulationEngine<?> engine = factory.createEngine(config, networkApi, sharedScheduler);
-        Scenario scenario = new Scenario(id, type, config, engine, networkApi);
+        SimulationEngine<?> engine = factory.createEngine(config, publisher, sharedScheduler);
+        Scenario scenario = new Scenario(id, type, config, engine, publisher);
         scenarios.put(id, scenario);
         return scenario;
     }

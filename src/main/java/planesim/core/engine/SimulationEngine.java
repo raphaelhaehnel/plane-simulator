@@ -21,9 +21,9 @@ import java.util.function.Supplier;
  * SimulatedObject} (geographic, built via {@link #create}) vs {@link SimulatedValue}
  * (non-geographic, built via {@link #createValueEngine}) are just two different ways to produce
  * one. {@code T} is sent via a plain {@code Consumer<T>} rather than {@code
- * planesim.external.NetworkApi} directly, so callers integrating a real multi-method {@code NetworkApi}
- * just pass a method reference, e.g. {@code networkApi::send} (which resolves to the matching
- * overload for whichever {@code T} this engine was created with).
+ * planesim.external.NetworkManager} directly, so the engine neither knows nor cares which topic its
+ * objects end up on — callers bind that themselves, e.g. {@code publisher::send} or {@code
+ * entity -> networkManager.send(entity, topicName)}.
  *
  * <p>The engine does not own a thread: it's handed a {@link ScheduledExecutorService} (typically
  * shared across many engines/scenarios) and only tracks its own {@link ScheduledFuture}, so
@@ -63,7 +63,7 @@ public final class SimulationEngine<T> {
      * @param movementStyle whether the objects fly their formation's natural movement pattern or
      *                      stay fixed in place (e.g. a radar) — see {@link MovementStyle}
      * @param sink          where each object's current state is sent every tick, e.g. {@code
-     *                      networkApi::send}
+     *                      publisher::send}
      * @param objectFactory supplies one new externally-provided object instance per simulated
      *                      object, e.g. {@code Plane::new}
      * @param writer        projects local-frame state onto the external object's fields — see
@@ -84,7 +84,7 @@ public final class SimulationEngine<T> {
      * tick via {@code generator}.
      *
      * @param sink          where each object's current state is sent every tick, e.g. {@code
-     *                      networkApi::send}
+     *                      publisher::send}
      * @param objectFactory supplies one new externally-provided object instance per simulated
      *                      object, e.g. {@code Weather::new}
      * @param generator     produces each tick's field values — see {@link ValueGenerators} for the
@@ -127,7 +127,7 @@ public final class SimulationEngine<T> {
             for (SimulatedEntity<T> item : items) {
                 T external = item.writeToExternal();
                 sink.accept(external);
-                log.info("Sent {} to NetworkApi: {}", external.getClass().getSimpleName(), external);
+                log.info("Sent {} to the network: {}", external.getClass().getSimpleName(), external);
             }
 
             // 2) Advance every object for the next tick (a no-op for non-geographic objects).

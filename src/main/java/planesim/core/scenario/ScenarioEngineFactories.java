@@ -21,17 +21,17 @@ import java.util.Map;
  */
 public final class ScenarioEngineFactories {
 
-    public static final ScenarioEngineFactory PLANE = (config, networkApi, scheduler) ->
+    public static final ScenarioEngineFactory PLANE = (config, publisher, scheduler) ->
             SimulationEngine.<Plane>create((GeoScenarioConfig) config, MovementStyle.MOBILE,
-                    networkApi::send, Plane::new, ObjectWriters.PLANE, scheduler);
+                    publisher::send, Plane::new, ObjectWriters.PLANE, scheduler);
 
-    public static final ScenarioEngineFactory RADAR = (config, networkApi, scheduler) ->
+    public static final ScenarioEngineFactory RADAR = (config, publisher, scheduler) ->
             SimulationEngine.<Radar>create((GeoScenarioConfig) config, MovementStyle.STATIC,
-                    networkApi::send, Radar::new, ObjectWriters.RADAR, scheduler);
+                    publisher::send, Radar::new, ObjectWriters.RADAR, scheduler);
 
-    public static final ScenarioEngineFactory WEATHER = (config, networkApi, scheduler) ->
+    public static final ScenarioEngineFactory WEATHER = (config, publisher, scheduler) ->
             SimulationEngine.<Weather>createValueEngine((NonGeoScenarioConfig) config,
-                    networkApi::send, Weather::new, ValueGenerators.WEATHER, scheduler);
+                    publisher::send, Weather::new, ValueGenerators.WEATHER, scheduler);
 
     public static final Map<ScenarioType, ScenarioEngineFactory> DEFAULTS = Map.of(
             ScenarioType.PLANE, PLANE,

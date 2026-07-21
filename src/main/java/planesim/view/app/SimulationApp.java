@@ -1,6 +1,7 @@
 package planesim.view.app;
 
-import planesim.external.NetworkApi;
+import planesim.external.NetworkConfiguration;
+import planesim.external.NetworkManager;
 import planesim.external.Plane;
 import planesim.external.Radar;
 import planesim.external.Weather;
@@ -13,34 +14,29 @@ import planesim.core.engine.ValueGenerators;
 import planesim.core.formation.CircleFormation;
 import planesim.core.formation.LineFormation;
 
+import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * Example wiring for both formation types and every simulated object type. Replace the
- * {@link Plane}/{@link Radar}/{@link Weather}/{@link NetworkApi} placeholders with your real
+ * {@link Plane}/{@link Radar}/{@link Weather}/{@link NetworkManager} placeholders with your real
  * library imports and this is basically all the setup code you need.
  */
 public final class SimulationApp {
 
-    private static final NetworkApi NETWORK_API = new NetworkApi() {
-        @Override
-        public void send(Plane plane) {
-            System.out.printf("plane lat=%.6f lon=%.6f alt=%.1f vx=%.2f vy=%.2f heading=%.1f%n",
-                    plane.latitude, plane.longitude, plane.altitude, plane.vx, plane.vy, plane.heading);
-        }
+    private static final String PLANE_TOPIC = "planes";
+    private static final String RADAR_TOPIC = "radars";
+    private static final String WEATHER_TOPIC = "weather";
 
-        @Override
-        public void send(Radar radar) {
-            System.out.printf("radar lat=%.6f lon=%.6f alt=%.1f%n", radar.latitude, radar.longitude, radar.altitude);
-        }
-
-        @Override
-        public void send(Weather weather) {
-            System.out.printf("weather windVelocity=%.2f temperature=%.1f isSunny=%b%n",
-                    weather.windVelocity, weather.temperature, weather.isSunny);
-        }
-    };
+    /**
+     * The one {@link NetworkManager} for this JVM — built once, with every topic opened up front,
+     * then sent through everywhere below. The configuration is a stand-in until the real
+     * JSON-backed {@link NetworkConfiguration} exists.
+     */
+    private static final NetworkManager NETWORK = NetworkManager.builder()
+            .configuration(new NetworkConfiguration("demo", List.of(PLANE_TOPIC, RADAR_TOPIC, WEATHER_TOPIC)))
+            .build();
 
     public static void main(String[] args) throws InterruptedException {
         runLineExample();
@@ -98,7 +94,7 @@ public final class SimulationApp {
     private static void runPlanesFor(GeoScenarioConfig config, long millis) throws InterruptedException {
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
         SimulationEngine<Plane> engine = SimulationEngine.create(config, MovementStyle.MOBILE,
-                NETWORK_API::send, Plane::new, ObjectWriters.PLANE, scheduler);
+                plane -> NETWORK.send(plane, PLANE_TOPIC), Plane::new, ObjectWriters.PLANE, scheduler);
         engine.start();
         Thread.sleep(millis);
         engine.pause();
@@ -108,7 +104,7 @@ public final class SimulationApp {
     private static void runRadarsFor(GeoScenarioConfig config, long millis) throws InterruptedException {
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
         SimulationEngine<Radar> engine = SimulationEngine.create(config, MovementStyle.STATIC,
-                NETWORK_API::send, Radar::new, ObjectWriters.RADAR, scheduler);
+                radar -> NETWORK.send(radar, RADAR_TOPIC), Radar::new, ObjectWriters.RADAR, scheduler);
         engine.start();
         Thread.sleep(millis);
         engine.pause();
@@ -118,7 +114,7 @@ public final class SimulationApp {
     private static void runWeatherFor(NonGeoScenarioConfig config, long millis) throws InterruptedException {
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
         SimulationEngine<Weather> engine = SimulationEngine.createValueEngine(config,
-                NETWORK_API::send, Weather::new, ValueGenerators.WEATHER, scheduler);
+                weather -> NETWORK.send(weather, WEATHER_TOPIC), Weather::new, ValueGenerators.WEATHER, scheduler);
         engine.start();
         Thread.sleep(millis);
         engine.pause();

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A standalone simulation module that drives simulated objects — some geographic (planes, radars;
 placed in a line or circle pattern and, for mobile ones, flown), one non-geographic (weather; no
-position at all) — and periodically publishes each object's state to a `NetworkApi`. **The one
+position at all) — and periodically publishes each object's state to a `NetworkManager`. **The one
 distinction that matters architecturally is geographic vs. non-geographic** — not "plane vs. radar
 vs. weather" — see "Adding a new object type" below.
 
@@ -17,7 +17,7 @@ system:
   — the host system runs this HTTP API and drives it from its own existing UI/orchestration
   system, instead of the disposable Swing UI in this repo. Nothing in it depends on `view`.
 - **`planesim.external`** — placeholders/mocks for the externally-provided classes (`Plane`,
-  `Radar`, `Weather`, `NetworkApi`) that don't exist in this repo yet. In the real environment
+  `Radar`, `Weather`, `Entity`, `NetworkManager`) that don't exist in this repo yet. In the real environment
   these get deleted and replaced by the host system's real imports — `core` only depends on their
   *shape* (field names/types), never on this package's actual files existing.
 - **`planesim.view`** — the Swing UI and the HTTP calls it makes to reach the API in `core`. **Not
@@ -26,7 +26,7 @@ system:
   standalone, without needing a real consumer wired up yet.
 
 This repo will eventually be installed into a different environment where `Plane`, `Radar`,
-`Weather`, and `NetworkApi` are imported from an external library instead of defined locally.
+`Weather`, `Entity`, and `NetworkManager` are imported from an external library instead of defined locally.
 Everything in `planesim.external` is a **mock** that exists only so this module compiles and runs
 standalone — do not add behavior to them beyond matching the real library's shape (a `toString()`
 override for readable logging is the one exception already present; it's diagnostic-only and
@@ -34,7 +34,7 @@ doesn't affect the field contract), and don't treat them as the real contract to
 
 The project's one real purpose is: **create simulated objects, evolve them over time (move them,
 keep them fixed, or regenerate their values — whatever fits the object), and send their state
-through the NetworkApi.** That's `planesim.core.engine` (`SimulationEngine`,
+through the NetworkManager.** That's `planesim.core.engine` (`SimulationEngine`,
 `SimulatedEntity`/`SimulatedObject`/`SimulatedValue`, `FormationPlanner`), `planesim.core.behavior`
 (`FlightBehavior`/implementations), `planesim.core.geo` (`GeoMath`/`Vector2`), and
 `planesim.core.scenario` (multi-scenario orchestration) — all type-agnostic over the external
@@ -101,21 +101,30 @@ curl -X POST http://localhost:8080/stopAll
 curl -X POST http://localhost:8080/deleteScenario -H "Content-Type: application/json" -d '{"id":"<id>"}'
 ```
 
-## Integrating the real Plane / Radar / Weather / NetworkApi
+## Integrating the real Plane / Radar / Weather / NetworkManager
 
-`planesim.external.{Plane,Radar,Weather,NetworkApi}` are placeholders (see their javadoc). To wire
-in the real types from the host system:
+`planesim.external.{Entity,Plane,Radar,Weather,NetworkManager,NetworkConfiguration,NetworkWriter,Topic}` are
+placeholders (see their javadoc). To wire in the real types from the host system:
 - Delete the whole `planesim.external` package and `planesim.view` package; only `planesim.core`
   (and its subpackages, including `core.server` — the HTTP API is production code, it ships too)
   is needed in the real environment.
-- Point `planesim.core`'s imports of `Plane`/`Radar`/`Weather`/`NetworkApi` at the host system's
-  real classes instead (they're only referenced from `planesim.core.engine.ObjectWriters`/
-  `ValueGenerators` and `planesim.core.scenario.ScenarioNetworkApi`/`ScenarioManager` — nothing in
-  `core.server` references them directly, it only ever deals with `core.scenario`'s
-  already-abstracted `ScenarioConfig`/`Scenario` types).
-- `NetworkApi` needs one `void send(...)` overload per object type it carries — today
-  `send(Plane plane)`, `send(Radar radar)`, `send(Weather weather)`. Add one more overload per
-  future object type.
+- Point `planesim.core`'s imports of `Entity`/`Plane`/`Radar`/`Weather`/`NetworkManager` at the
+  host system's real classes instead (they're only referenced from
+  `planesim.core.engine.ObjectWriters`/`ValueGenerators` and
+  `planesim.core.scenario.ScenarioPublisher`/`ScenarioManager`/`NonGeoFieldReader`, plus the one
+  `NetworkManager.builder()` call in `SimulationServerApp.buildNetwork()` — no other part of
+  `core.server` references them, it only ever deals with `core.scenario`'s already-abstracted
+  `ScenarioConfig`/`Scenario` types).
+- `NetworkManager` needs to be a singleton built exactly once at startup
+  (`builder().configuration(...).build()`, read back via `getInstance()`) exposing one
+  `void send(Entity entity, String topicName)`. Unlike the old per-type `send(...)` overloads, this
+  signature is already type-agnostic — a new object type needs **no** change here, only a new
+  `Entity` subclass and a topic name. `NetworkConfiguration` (topic names, environment id) is the
+  builder's only input and is externally owned — it will be loaded from a JSON file.
+- `Entity` is the common supertype of every sent object. `core` never reads or writes its fields —
+  those are the network layer's to populate at send time — it only relies on
+  `Plane`/`Radar`/`Weather` (and any future type) extending it. See the Architecture section for
+  why `NonGeoFieldReader` deliberately skips them.
 - `Plane` needs the five public fields `altitude`, `latitude`, `longitude`, `vx`, `vy`, `heading`
   (or equivalently-named getters/setters) — `latitude`/`longitude` are radians, `vx`/`vy` are m/s
   in east/north components, `heading` is UI-only degrees derived from velocity, not used in
@@ -124,9 +133,9 @@ in the real types from the host system:
   never moves.
 - `Weather` needs just `windVelocity` (double, m/s), `temperature` (float, °C), `isSunny`
   (boolean) — no coordinates at all, since it isn't a positioned object.
-- Nothing else in the design needs to change — `SimulationEngine<T>` never references `NetworkApi`
-  directly (see Architecture below), so it doesn't care what the real `NetworkApi`'s full method
-  set looks like beyond the one overload it's handed a method reference to.
+- Nothing else in the design needs to change — `SimulationEngine<T>` never references
+  `NetworkManager` directly (see Architecture below), it only gets a `Consumer<T>` sink, so it
+  doesn't care what the real `NetworkManager`'s full method set looks like.
 
 ### Adding a new object type
 
@@ -136,7 +145,8 @@ question that matters is: does the new type have coordinates (geographic) or not
 (non-geographic)?** Not "is it like a plane" or "is it like weather" — those are just examples.
 
 **Geographic** (has lat/lon, gets placed by a formation — like `Plane`/`Radar`):
-1. Add the placeholder class to `planesim.external` and a `send(...)` overload to `NetworkApi`.
+1. Add the placeholder class to `planesim.external`, extending `Entity`. `NetworkManager` needs no
+   change — `send(Entity, String)` already accepts it.
 2. Add a predefined `ObjectWriter<YourType>` constant to `planesim.core.engine.ObjectWriters` —
    the only place that knows how to project local-frame state (lat/lon/alt/velocity) onto your
    type's fields.
@@ -145,23 +155,25 @@ question that matters is: does the new type have coordinates (geographic) or not
    `StaticBehavior` regardless of formation shape. If neither fits, add a new `FlightBehavior`
    implementation and wire it into `planesim.core.engine.FormationPlanner`'s
    `movementStyle == ...` branches.
-4. Add `ScenarioType.YOUR_TYPE(ScenarioCategory.GEOGRAPHIC)` and one constant to
+4. Add `ScenarioType.YOUR_TYPE(ScenarioCategory.GEOGRAPHIC, "your-topic")` and one constant to
    `planesim.core.scenario.ScenarioEngineFactories` (+ its `DEFAULTS` map) that calls
    `SimulationEngine.create(...)` with your `ObjectWriter` and `MovementStyle`.
-   `ScenarioManager` itself never needs to change.
-5. In `planesim.core.scenario.ScenarioNetworkApi`, add a `send(YourType obj)` override that
-   records into the existing `latestGeoByIndex` map via a new `GeoLiveState` (same shape as
-   plane/radar — just lat/lon/heading, nothing new to define).
+   `ScenarioManager` itself never needs to change, and the topic registers itself at startup
+   (`SimulationServerApp.buildNetwork()` loops over `ScenarioType.values()`).
+5. In `planesim.core.scenario.ScenarioPublisher`, add a `send(YourType obj)` method that records
+   into the existing `latestGeoByIndex` map via a new `GeoLiveState` (same shape as plane/radar —
+   just lat/lon/heading, nothing new to define), then calls the shared `publish(obj)`.
 
 **Non-geographic** (no coordinates at all — like `Weather`):
-1. Add the placeholder class to `planesim.external` and a `send(...)` overload to `NetworkApi`.
+1. Add the placeholder class to `planesim.external`, extending `Entity`. `NetworkManager` needs no
+   change — `send(Entity, String)` already accepts it.
 2. Add a predefined `ValueGenerator<YourType>` constant to `planesim.core.engine.ValueGenerators`
    — this produces each tick's field values directly (no position/velocity involved at all).
-3. Add `ScenarioType.YOUR_TYPE(ScenarioCategory.NON_GEOGRAPHIC)` and one constant to
+3. Add `ScenarioType.YOUR_TYPE(ScenarioCategory.NON_GEOGRAPHIC, "your-topic")` and one constant to
    `planesim.core.scenario.ScenarioEngineFactories` (+ its `DEFAULTS` map) that calls
    `SimulationEngine.createValueEngine(...)`. `ScenarioManager` itself never needs to change.
-4. In `ScenarioNetworkApi`, add a `send(YourType obj)` override that's a **one-line delegation to
-   the existing `recordNonGeo(obj)`** — that's it. No new record, no new DTO, no new
+4. In `ScenarioPublisher`, add a `send(YourType obj)` method that's a **two-line delegation to
+   the existing `recordNonGeo(obj)` + `publish(obj)`** — that's it. No new record, no new DTO, no new
    `RequestMapper` branch. `NonGeoLiveState`/`NonGeoStateDto` are already generic (a
    `Map<String, Object>` of whatever public fields your type has, captured via reflection — see
    `NonGeoFieldReader`), specifically so this step never grows.
@@ -185,11 +197,12 @@ planesim.core                    all logic + the HTTP API — what ships to the 
   planesim.core.geo                Vector2, GeoMath
   planesim.core.scenario           ScenarioType/Status/Category, GeoLiveState, NonGeoLiveState(+FieldReader),
                                     ScenarioEngineFactory(ies), ScenarioLimitExceededException,
-                                    ScenarioNetworkApi, Scenario, ScenarioManager
+                                    ScenarioPublisher, Scenario, ScenarioManager
   planesim.core.server              SimulationServerApp, com.sun.net.httpserver handlers, RequestMapper
   planesim.core.server.dto          JSON wire-format DTOs
 
-planesim.external                 Plane, Radar, Weather, NetworkApi — mocks, deleted on real integration
+planesim.external                 Entity + Plane/Radar/Weather, NetworkManager(+NetworkConfiguration,
+                                    NetworkWriter, Topic) — mocks, deleted on real integration
 
 planesim.view                     Swing UI + the calls it makes to reach the API — not needed in the real environment
   planesim.view.ui                  PlaneSimulatorUiApp, MapPanel, PlaneSnapshot, ScenarioPollingClient
@@ -215,10 +228,12 @@ Java visibility doesn't reach across packages, a few types are `public` purely s
 subpackage can consume them (`FlightBehavior`, `StepResult`, `LineBounceBehavior`,
 `CircleRandomWalkBehavior`, `StaticBehavior` in `core.behavior`; `SimulationEngine`,
 `ScenarioConfig`, `MovementStyle`, `ObjectWriter`, `ObjectWriters`, `NonGeoScenarioConfig`,
-`ValueGenerator`, `ValueGenerators` in `core.engine`). Types only ever constructed by a class in
-their own package kept their package-private visibility: `SimulatedEntity`/`SimulatedObject`/
-`SimulatedValue` (all in `core.engine`), `MapPanel`/`PlaneSnapshot` (in `view.ui`), and
-`ScenarioNetworkApi`/`NonGeoFieldReader` (in `core.scenario`).
+`ValueGenerator`, `ValueGenerators` in `core.engine`; `ScenarioPublisher` in `core.scenario`, only
+because the public `ScenarioEngineFactory` names it as a parameter type — its *constructor* is
+still package-private, since only `ScenarioManager` ever builds one). Types only ever constructed
+by a class in their own package kept their package-private visibility:
+`SimulatedEntity`/`SimulatedObject`/`SimulatedValue` (all in `core.engine`),
+`MapPanel`/`PlaneSnapshot` (in `view.ui`), and `NonGeoFieldReader` (in `core.scenario`).
 
 ## Architecture
 
@@ -258,11 +273,45 @@ regardless of pool size, and different engines never share `SimulatedEntity` ins
 `create*` call builds its own private item list), so only *one* engine's tick ever touches a given
 item at a time, even across different pool threads.
 
-`SimulationEngine<T>` takes a plain `Consumer<T> sink`, not `NetworkApi` directly — callers pass a
-method reference like `networkApi::send`, which resolves to whichever `send(...)` overload matches
-the `T` that particular engine was created with. This keeps `core.engine` decoupled from
-`NetworkApi` entirely (it only needs `planesim.external.{Plane,Radar,Weather}` for
-`ObjectWriters`/`ValueGenerators`, not the `NetworkApi` interface).
+`SimulationEngine<T>` takes a plain `Consumer<T> sink`, not `NetworkManager` directly — callers
+bind the topic themselves, either via a method reference like `publisher::send` (the scenario
+path) or a lambda like `plane -> network.send(plane, PLANE_TOPIC)` (the `SimulationApp` demo). This
+keeps `core.engine` decoupled from `NetworkManager` entirely — it never knows which topic its
+objects land on, and only needs `planesim.external.{Plane,Radar,Weather}` for
+`ObjectWriters`/`ValueGenerators`.
+
+**The `NetworkManager` singleton.** `planesim.external.NetworkManager` is built exactly once per
+JVM, in `main()` — `SimulationServerApp.buildNetwork()` for the server, a static field in
+`SimulationApp` for the demo — via `NetworkManager.builder().configuration(...).build()`. The
+builder's single input is a `NetworkConfiguration` (topic names, environment id — eventually loaded
+from a JSON file), and from it `build()` instantiates the collaborators: the `NetworkWriter`(s) and
+the whole `Map<String, Topic>`. **Every topic is opened up front, at build time**; `send` only ever
+picks an already-open one by name and throws on an unknown one. `build()` installs the instance and
+throws if called twice; `getInstance()` throws if called before `build()`.
+
+Its one method is `send(Entity entity, String topicName)` — type-agnostic, since every external
+object extends `Entity`, so a new object type never adds a method here (contrast the old
+`NetworkApi`, which needed one `send(...)` overload per type). Despite being a singleton it is
+**passed by constructor injection**, never fetched via `getInstance()` inside `core`:
+`SimulationServerApp` hands it to `ScenarioManager`, which hands it to each `ScenarioPublisher`.
+Keep it that way — `core` should stay independent of how the instance is installed.
+
+A send that throws propagates into `SimulationEngine.tick()`, which catches and logs it and keeps
+ticking — deliberate: one bad publish shouldn't kill a scenario's schedule.
+
+Until the real JSON config exists, both entry points construct a `NetworkConfiguration` in code;
+the server derives its topic list from `ScenarioType.values()`, so a new type is publishable as
+soon as it declares a `topicName()`. Both of those are stand-ins, marked as such — **the real
+`NetworkConfiguration` is externally owned**, so don't grow it into a config system here.
+
+**`Entity`'s own fields belong to the network layer.** Whatever the real `Entity` declares (send
+timestamp, environment id, ...) is populated *by the network layer at send time* — the placeholder
+`NetworkWriter` stamps `timestamp` to model this. `planesim.core` never writes them; it only ever
+fills in a subclass's own fields via `ObjectWriters`/`ValueGenerators`. This matters concretely for
+`NonGeoFieldReader`, which reflects over `getFields()` — that returns *inherited* public fields
+too, so it explicitly skips anything declared by `Entity` or above it (`isTransportMetadata`).
+Without that, every field the real `Entity` happens to declare would silently appear in
+`GET /getScenarios`'s `nonGeoObjects[].fields` alongside the simulated reading.
 
 **Lifecycle: `start()`/`pause()`, not `stop()`.** There is no `stop()` — `pause()` cancels the
 engine's own scheduled task (via its `ScheduledFuture`) without touching the shared executor or
@@ -278,7 +327,7 @@ object type directly — it's handed a `Map<ScenarioType, ScenarioEngineFactory>
 (`ScenarioEngineFactories.DEFAULTS`, built in `SimulationServerApp.main()`) and validates every
 `ScenarioType` has a registered factory up front (fails fast at startup, not on the first request
 for a type). `createScenario` looks up the matching `ScenarioEngineFactory` and calls its
-`createEngine(config, networkApi, scheduler)`, which is where the object-class/`ObjectWriters`
+`createEngine(config, publisher, scheduler)`, which is where the object-class/`ObjectWriters`
 `ValueGenerators`/`MovementStyle` choice actually lives (one factory constant per `ScenarioType` in
 `ScenarioEngineFactories`, e.g. `PLANE` → `MovementStyle.MOBILE` + `ObjectWriters.PLANE`, `RADAR` →
 `MovementStyle.STATIC` + `ObjectWriters.RADAR`, `WEATHER` → `createValueEngine` +
@@ -288,15 +337,20 @@ enforces `MAX_SCENARIOS` (100), throwing `ScenarioLimitExceededException` (mappe
 `AbstractJsonHandler`) once reached — a soft, approximate cap (the check-then-put isn't atomic
 under concurrent creates), meant only to stop unbounded growth, not to be a precise quota.
 
-**`ScenarioNetworkApi` and the generic non-geographic live-state capture.** It implements every
-`NetworkApi` overload (a scenario is always homogeneous, so only one is ever actually exercised per
-instance), recording each object's latest published state keyed by object identity, so
-`core.server`'s `GET /getScenarios` handler has something to serve — thread-safe since HTTP
-handler threads read it concurrently with the tick thread writing it. Geographic and non-geographic
-sends are tracked in two separate maps, because their live-state shapes have nothing in common:
+**`ScenarioPublisher`: one scenario's outbound end.** It does two things per object per tick, and
+its `send(...)` methods are the *only* place the two meet: (1) **publish** — one shared
+`publish(Entity)` call forwarding to `NetworkManager.send(entity, topicName)` with the topic from
+`ScenarioType.topicName()`, uniform across all types since everything is an `Entity`; and (2)
+**record** the object's latest published state keyed by object identity, so `core.server`'s
+`GET /getScenarios` handler has something to serve — thread-safe since HTTP handler threads read
+it concurrently with the tick thread writing it. One `send(...)` method exists per object type (a
+scenario is always homogeneous, so only one is ever actually exercised per instance) purely
+because the engine binds a method reference to whichever `T` it was created with. Recording, unlike
+publishing, splits geographic from non-geographic into two separate maps, because their live-state
+shapes have nothing in common:
 - Geographic (`send(Plane)`/`send(Radar)`/...) → `GeoLiveState(index, latRad, lonRad, headingDeg)`
   — always this same shape, so it's built directly, field by field.
-- Non-geographic (`send(Weather)`/...) → all delegate to one private `recordNonGeo(Object target)`
+- Non-geographic (`send(Weather)`/...) → all delegate to one private `recordNonGeo(Entity target)`
   helper, which builds a `NonGeoLiveState(index, Map<String,Object> fields)` by reading every
   public instance field off `target` via reflection (`NonGeoFieldReader.readFields`). This is the
   key generality move: a non-geographic object's fields are arbitrary and type-specific (weather's
@@ -409,7 +463,7 @@ would be sub-pixel on any real map projection. Poll-thread UI mutations are wrap
 
 - Log4j2 (`LogManager.getLogger(...)`, console appender only, configured in
   `src/main/resources/log4j2.xml`) is used for **backend logging only** — `planesim.core.engine`
-  (object-sent-to-`NetworkApi` events at INFO, uncaught tick exceptions at ERROR) and
+  (object-sent-to-network events at INFO, uncaught tick exceptions at ERROR) and
   `planesim.core.server` (HTTP requests received at INFO, unexpected 500s at ERROR). Nothing in
   `planesim.view.ui` logs anything; keep it that way, the UI is view-only scaffolding, not a place
   to grow observability. Don't reintroduce `e.printStackTrace()` for error paths — use the class's
@@ -422,7 +476,7 @@ would be sub-pixel on any real map projection. Poll-thread UI mutations are wrap
   apply to it, or to any future non-geographic type.
 - Package-private (no modifier) visibility is used deliberately for internals only constructed by
   another class in the same package (`SimulatedEntity`, `SimulatedObject`, `SimulatedValue`,
-  `MapPanel`, `PlaneSnapshot`, `ScenarioNetworkApi`, `NonGeoFieldReader`) — keep new
+  `MapPanel`, `PlaneSnapshot`, `NonGeoFieldReader`) — keep new
   same-package-only types package-private rather than defaulting to `public`. Types that must be
   constructed from a different (sub)package (e.g. `core.engine` building `core.behavior`
   implementations, or `core.scenario` building `core.engine` engines) have to be `public` — that's

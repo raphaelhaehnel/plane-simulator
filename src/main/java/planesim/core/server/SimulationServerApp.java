@@ -3,9 +3,14 @@ package planesim.core.server;
 import com.sun.net.httpserver.HttpServer;
 import planesim.core.scenario.ScenarioEngineFactories;
 import planesim.core.scenario.ScenarioManager;
+import planesim.core.scenario.ScenarioType;
+import planesim.external.NetworkConfiguration;
+import planesim.external.NetworkManager;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -23,12 +28,14 @@ public final class SimulationServerApp {
     /** Bounded so a burst of requests can't grow the HTTP request-handling pool without limit. */
     private static final int HTTP_HANDLER_THREADS = 64;
 
+    private static final String ENVIRONMENT_ID = "standalone";
+
     public static void main(String[] args) throws IOException {
         int port = args.length > 0 ? Integer.parseInt(args[0]) : DEFAULT_PORT;
 
         ScheduledExecutorService scenarioScheduler = Executors.newScheduledThreadPool(
                 Math.max(4, Runtime.getRuntime().availableProcessors()));
-        ScenarioManager manager = new ScenarioManager(scenarioScheduler, ScenarioEngineFactories.DEFAULTS);
+        ScenarioManager manager = new ScenarioManager(scenarioScheduler, ScenarioEngineFactories.DEFAULTS, buildNetwork());
 
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/createScenario", new CreateScenarioHandler(manager));
@@ -41,5 +48,18 @@ public final class SimulationServerApp {
         server.start();
 
         System.out.println("SimulationServer listening on http://localhost:" + port);
+    }
+
+    /**
+     * Builds the one {@link NetworkManager} for this JVM. The configuration is a stand-in until the
+     * real JSON-backed {@link NetworkConfiguration} exists: it opens a topic per {@link
+     * ScenarioType}, so every type this server can create is publishable, and a new scenario type
+     * needs no change here beyond declaring its {@code topicName()}.
+     */
+    private static NetworkManager buildNetwork() {
+        List<String> topicNames = Arrays.stream(ScenarioType.values()).map(ScenarioType::topicName).toList();
+        return NetworkManager.builder()
+                .configuration(new NetworkConfiguration(ENVIRONMENT_ID, topicNames))
+                .build();
     }
 }

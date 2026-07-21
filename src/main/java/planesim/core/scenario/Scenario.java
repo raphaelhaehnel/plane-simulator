@@ -20,17 +20,17 @@ public final class Scenario {
     private final ScenarioType type;
     private final ScenarioConfig config;
     private final SimulationEngine<?> engine;
-    private final ScenarioNetworkApi networkApi;
+    private final ScenarioPublisher publisher;
 
     private volatile ScenarioStatus status = ScenarioStatus.CREATED;
 
     Scenario(String id, ScenarioType type, ScenarioConfig config, SimulationEngine<?> engine,
-             ScenarioNetworkApi networkApi) {
+             ScenarioPublisher publisher) {
         this.id = id;
         this.type = type;
         this.config = config;
         this.engine = engine;
-        this.networkApi = networkApi;
+        this.publisher = publisher;
     }
 
     public String id() {
@@ -51,12 +51,12 @@ public final class Scenario {
 
     /** The latest known state of every geographic object (plane/radar/...) in this scenario, ordered by index. */
     public List<GeoLiveState> liveGeoSnapshot() {
-        return networkApi.geoSnapshot();
+        return publisher.geoSnapshot();
     }
 
     /** The latest known reading of every non-geographic object (weather/...) in this scenario, ordered by index. */
     public List<NonGeoLiveState> liveNonGeoSnapshot() {
-        return networkApi.nonGeoSnapshot();
+        return publisher.nonGeoSnapshot();
     }
 
     SimulationEngine<?> engine() {
