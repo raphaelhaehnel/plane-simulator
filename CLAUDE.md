@@ -231,9 +231,9 @@ reverse). Within `planesim.core`: `geo` and `formation` have zero internal depen
 `behavior` depends only on `geo`; `network` depends only on `external` (for `Entity`/`Topic`);
 `engine` depends on `external` (for `Plane`/`Radar`/`Weather` in `ObjectWriters`/`ValueGenerators`),
 `geo`, `behavior`, and `formation`; `scenario` depends on `engine`, `network`, and `external`;
-`server` (+ `server.dto`) depends on `scenario`, `engine`, `formation`, `network`, and `external`
+`server` (+ `server.api`) depends on `scenario`, `engine`, `formation`, `network`, and `external`
 — all still within `core`, still nothing here ever depends on `view`.
-`planesim.view.ui` depends on `core.server.dto` (reuses `ScenarioDto`/`GeoStateDto` as its wire
+`planesim.view.ui` depends on `core.server.api` (reuses `ScenarioDto`/`GeoStateDto` as its wire
 format directly rather than inventing a parallel client-side DTO set) and `core.geo` — notably
 **not** on `core.engine`/`core.server`/`external` at all, since the UI never runs a
 `SimulationEngine` in-process or calls `core.server`'s Java API directly, it only talks HTTP to
@@ -386,7 +386,7 @@ shapes have nothing in common:
   are `windVelocity`/`temperature`/`isSunny`; a future one could be anything), so instead of a
   hand-written record + DTO + mapping function per type, the *shape itself* is generic — adding a
   new non-geographic type only ever requires a one-line `send(...)` override that calls
-  `recordNonGeo`, nothing else in `scenario` or `server.dto` changes.
+  `recordNonGeo`, nothing else in `scenario` or `server.api` changes.
 
 Continuing `ScenarioManager`: `createScenario` also opens the scenario's network writer
 (`network.openWriter(topicName)`) as part of registering it. `start`/`pause`/`delete` all key off the
@@ -552,6 +552,6 @@ would be sub-pixel on any real map projection. Poll-thread UI mutations are wrap
   external` is fine and expected (that's the mocked contract `core` is written against); `view ->
   core` and `view -> external` are both fine (the disposable demo/UI layer legitimately needs the
   real logic and the mock types to exercise it) — but note `view.ui` specifically only ever reaches
-  `core` over HTTP (via `core.server.dto`), never by calling `core.engine`/`core.server` Java code
+  `core` over HTTP (via `core.server.api`), never by calling `core.engine`/`core.server` Java code
   directly, since that's the whole point of it being a *client* of the API rather than embedding
   the engine.
