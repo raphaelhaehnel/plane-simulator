@@ -3,6 +3,7 @@ package planesim.core.server.dto;
 /** POST /createScenario request body. */
 public class CreateScenarioRequest {
     public String type;          // "PLANE", "RADAR", or "WEATHER"
+    public String topicName;     // required, network topic to publish this scenario's objects on
     public int amount;           // object count
     public Double originLatRad;  // required for PLANE/RADAR, radians; unused for WEATHER
     public Double originLonRad;  // required for PLANE/RADAR, radians; unused for WEATHER

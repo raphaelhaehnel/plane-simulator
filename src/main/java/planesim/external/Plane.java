@@ -7,8 +7,8 @@ package planesim.external;
  * standalone. Delete this file and use your actual import instead — the rest of the code only
  * relies on these five public fields existing with these names/types, so as long as your real
  * class exposes them (as fields or as getters/setters of the same name), nothing else needs
- * to change (plus being an {@link Entity}, so it can be handed to
- * {@link NetworkManager#send(Entity, String)}).
+ * to change (plus being an {@link Entity}, so it can be handed to the network manager's
+ * {@code send(Entity, String)}).
  */
 public class Plane extends Entity {
     public double altitude;

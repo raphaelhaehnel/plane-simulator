@@ -1,28 +1,23 @@
 package planesim.core.scenario;
 
 /**
- * The kind of object a scenario simulates, and the network topic its objects are published on —
- * a scenario is always homogeneous, so one topic per type is all that's needed.
+ * The kind of object a scenario simulates. Its {@link ScenarioCategory} is what the HTTP layer
+ * dispatches on to decide between a geographic and a non-geographic config. The network topic is
+ * no longer tied to the type — it is chosen per scenario via the {@code topicName} on
+ * {@code POST /createScenario}.
  */
 public enum ScenarioType {
-    PLANE(ScenarioCategory.GEOGRAPHIC, "planes"),
-    RADAR(ScenarioCategory.GEOGRAPHIC, "radars"),
-    WEATHER(ScenarioCategory.NON_GEOGRAPHIC, "weather");
+    PLANE(ScenarioCategory.GEOGRAPHIC),
+    RADAR(ScenarioCategory.GEOGRAPHIC),
+    WEATHER(ScenarioCategory.NON_GEOGRAPHIC);
 
     private final ScenarioCategory category;
-    private final String topicName;
 
-    ScenarioType(ScenarioCategory category, String topicName) {
+    ScenarioType(ScenarioCategory category) {
         this.category = category;
-        this.topicName = topicName;
     }
 
     public ScenarioCategory category() {
         return category;
-    }
-
-    /** The {@code planesim.external.NetworkManager} topic this type's objects are sent on. */
-    public String topicName() {
-        return topicName;
     }
 }

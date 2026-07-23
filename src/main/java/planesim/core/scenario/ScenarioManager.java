@@ -2,7 +2,7 @@ package planesim.core.scenario;
 
 import planesim.core.engine.ScenarioConfig;
 import planesim.core.engine.SimulationEngine;
-import planesim.external.NetworkManager;
+import planesim.core.network.NetworkManager;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -53,18 +53,22 @@ public final class ScenarioManager {
      * editing this class. {@code config} must be the matching {@link ScenarioConfig} kind for
      * {@code type} — {@link RequestMapper} guarantees that.
      *
+     * @param topicName the network topic this scenario publishes on; a writer is opened for it now
+     *                  (shared/reference-counted if another scenario already uses the same name) and
+     *                  released on {@link #delete(String)}
      * @throws ScenarioLimitExceededException if {@link #MAX_SCENARIOS} scenarios are already registered
      */
-    public Scenario createScenario(ScenarioType type, ScenarioConfig config) {
+    public Scenario createScenario(ScenarioType type, ScenarioConfig config, String topicName) {
         if (scenarios.size() >= MAX_SCENARIOS) {
             throw new ScenarioLimitExceededException(
                     "Maximum number of concurrent scenarios (" + MAX_SCENARIOS + ") reached; delete an existing one first");
         }
         String id = UUID.randomUUID().toString();
-        ScenarioPublisher publisher = new ScenarioPublisher(network, type.topicName());
+        ScenarioPublisher publisher = new ScenarioPublisher(network, topicName);
         ScenarioEngineFactory factory = engineFactories.get(type);
         SimulationEngine<?> engine = factory.createEngine(config, publisher, sharedScheduler);
-        Scenario scenario = new Scenario(id, type, config, engine, publisher);
+        network.openWriter(topicName);
+        Scenario scenario = new Scenario(id, type, topicName, config, engine, publisher);
         scenarios.put(id, scenario);
         return scenario;
     }
@@ -108,13 +112,18 @@ public final class ScenarioManager {
         return stoppedIds;
     }
 
-    /** Removes a scenario from memory, stopping its ticking first. False if {@code id} is unknown. */
+    /**
+     * Removes a scenario from memory, stopping its ticking first and releasing its network writer
+     * (which is only actually closed if no other scenario is still using the same topic). False if
+     * {@code id} is unknown.
+     */
     public boolean delete(String id) {
         Scenario scenario = scenarios.remove(id);
         if (scenario == null) {
             return false;
         }
         scenario.engine().pause();
+        network.closeWriter(scenario.topicName());
         return true;
     }
 }

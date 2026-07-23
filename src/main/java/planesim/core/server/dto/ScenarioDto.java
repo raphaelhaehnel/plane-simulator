@@ -11,6 +11,7 @@ import java.util.List;
 public class ScenarioDto {
     public String id;
     public String type;
+    public String topicName;
     public String status;
     public int amount;
     public Double originLatRad;

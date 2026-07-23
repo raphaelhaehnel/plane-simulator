@@ -1,7 +1,7 @@
 package planesim.view.app;
 
-import planesim.external.NetworkConfiguration;
-import planesim.external.NetworkManager;
+import planesim.core.network.NetworkConfiguration;
+import planesim.core.network.NetworkManager;
 import planesim.external.Plane;
 import planesim.external.Radar;
 import planesim.external.Weather;
@@ -14,7 +14,6 @@ import planesim.core.engine.ValueGenerators;
 import planesim.core.formation.CircleFormation;
 import planesim.core.formation.LineFormation;
 
-import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -30,12 +29,13 @@ public final class SimulationApp {
     private static final String WEATHER_TOPIC = "weather";
 
     /**
-     * The one {@link NetworkManager} for this JVM — built once, with every topic opened up front,
-     * then sent through everywhere below. The configuration is a stand-in until the real
-     * JSON-backed {@link NetworkConfiguration} exists.
+     * The one {@link NetworkManager} for this JVM — built once, then sent through everywhere below.
+     * Each example opens its own writer for the topic it uses (and closes it when done), mirroring
+     * how the server opens a writer per scenario. The configuration is a stand-in until the real
+     * JSON-backed {@link NetworkConfiguration} is loaded (the server loads it from {@code config.json}).
      */
     private static final NetworkManager NETWORK = NetworkManager.builder()
-            .configuration(new NetworkConfiguration("demo", List.of(PLANE_TOPIC, RADAR_TOPIC, WEATHER_TOPIC)))
+            .configuration(new NetworkConfiguration("demo", 0))
             .build();
 
     public static void main(String[] args) throws InterruptedException {
@@ -92,6 +92,7 @@ public final class SimulationApp {
     }
 
     private static void runPlanesFor(GeoScenarioConfig config, long millis) throws InterruptedException {
+        NETWORK.openWriter(PLANE_TOPIC);
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
         SimulationEngine<Plane> engine = SimulationEngine.create(config, MovementStyle.MOBILE,
                 plane -> NETWORK.send(plane, PLANE_TOPIC), Plane::new, ObjectWriters.PLANE, scheduler);
@@ -99,9 +100,11 @@ public final class SimulationApp {
         Thread.sleep(millis);
         engine.pause();
         scheduler.shutdown();
+        NETWORK.closeWriter(PLANE_TOPIC);
     }
 
     private static void runRadarsFor(GeoScenarioConfig config, long millis) throws InterruptedException {
+        NETWORK.openWriter(RADAR_TOPIC);
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
         SimulationEngine<Radar> engine = SimulationEngine.create(config, MovementStyle.STATIC,
                 radar -> NETWORK.send(radar, RADAR_TOPIC), Radar::new, ObjectWriters.RADAR, scheduler);
@@ -109,9 +112,11 @@ public final class SimulationApp {
         Thread.sleep(millis);
         engine.pause();
         scheduler.shutdown();
+        NETWORK.closeWriter(RADAR_TOPIC);
     }
 
     private static void runWeatherFor(NonGeoScenarioConfig config, long millis) throws InterruptedException {
+        NETWORK.openWriter(WEATHER_TOPIC);
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
         SimulationEngine<Weather> engine = SimulationEngine.createValueEngine(config,
                 weather -> NETWORK.send(weather, WEATHER_TOPIC), Weather::new, ValueGenerators.WEATHER, scheduler);
@@ -119,5 +124,6 @@ public final class SimulationApp {
         Thread.sleep(millis);
         engine.pause();
         scheduler.shutdown();
+        NETWORK.closeWriter(WEATHER_TOPIC);
     }
 }

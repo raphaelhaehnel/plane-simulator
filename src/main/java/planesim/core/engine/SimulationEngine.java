@@ -21,7 +21,7 @@ import java.util.function.Supplier;
  * SimulatedObject} (geographic, built via {@link #create}) vs {@link SimulatedValue}
  * (non-geographic, built via {@link #createValueEngine}) are just two different ways to produce
  * one. {@code T} is sent via a plain {@code Consumer<T>} rather than {@code
- * planesim.external.NetworkManager} directly, so the engine neither knows nor cares which topic its
+ * planesim.core.network.NetworkManager} directly, so the engine neither knows nor cares which topic its
  * objects end up on — callers bind that themselves, e.g. {@code publisher::send} or {@code
  * entity -> networkManager.send(entity, topicName)}.
  *

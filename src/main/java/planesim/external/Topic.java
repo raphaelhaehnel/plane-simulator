@@ -4,8 +4,8 @@ package planesim.external;
  * PLACEHOLDER ONLY.
  * <p>
  * Stands in for your real network topic (channel/queue/DDS topic/...) so this module compiles
- * standalone. {@link NetworkManager} only ever looks one up by name and hands it to
- * {@link NetworkWriter}; nothing in {@code planesim.core} ever touches a {@code Topic} directly.
+ * standalone. The network manager only ever looks one up by name and hands it to a
+ * {@code NetworkWriter}; nothing in {@code planesim.core} ever touches a {@code Topic} directly.
  * Delete this file and use your actual import instead.
  */
 public final class Topic {

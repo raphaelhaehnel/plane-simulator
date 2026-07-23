@@ -1,7 +1,7 @@
 package planesim.core.scenario;
 
+import planesim.core.network.NetworkManager;
 import planesim.external.Entity;
-import planesim.external.NetworkManager;
 import planesim.external.Plane;
 import planesim.external.Radar;
 import planesim.external.Weather;

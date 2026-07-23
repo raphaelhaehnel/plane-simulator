@@ -45,6 +45,14 @@ public final class RequestMapper {
         }
     }
 
+    /** Returns {@code req.topicName}, or throws {@link BadRequestException} if it's missing/blank. */
+    public static String toTopicName(CreateScenarioRequest req) {
+        if (req.topicName == null || req.topicName.isBlank()) {
+            throw new BadRequestException("topicName is required");
+        }
+        return req.topicName;
+    }
+
     /** Dispatches on {@code type}'s category to build the matching {@link ScenarioConfig} kind. */
     public static ScenarioConfig toScenarioConfig(ScenarioType type, CreateScenarioRequest req) {
         return switch (type.category()) {
@@ -102,6 +110,7 @@ public final class RequestMapper {
         ScenarioDto dto = new ScenarioDto();
         dto.id = scenario.id();
         dto.type = scenario.type().name();
+        dto.topicName = scenario.topicName();
         dto.status = scenario.status().name();
         dto.amount = config.objectCount();
         dto.sendInterval = config.publishIntervalMs();

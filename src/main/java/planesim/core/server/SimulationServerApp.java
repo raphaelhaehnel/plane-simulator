@@ -1,16 +1,16 @@
 package planesim.core.server;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
+import planesim.core.network.NetworkConfiguration;
+import planesim.core.network.NetworkManager;
 import planesim.core.scenario.ScenarioEngineFactories;
 import planesim.core.scenario.ScenarioManager;
-import planesim.core.scenario.ScenarioType;
-import planesim.external.NetworkConfiguration;
-import planesim.external.NetworkManager;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
-import java.util.Arrays;
-import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -28,7 +28,8 @@ public final class SimulationServerApp {
     /** Bounded so a burst of requests can't grow the HTTP request-handling pool without limit. */
     private static final int HTTP_HANDLER_THREADS = 64;
 
-    private static final String ENVIRONMENT_ID = "standalone";
+    /** Classpath location of the network configuration (see {@code src/main/resources}). */
+    private static final String CONFIG_RESOURCE = "/config.json";
 
     public static void main(String[] args) throws IOException {
         int port = args.length > 0 ? Integer.parseInt(args[0]) : DEFAULT_PORT;
@@ -51,15 +52,26 @@ public final class SimulationServerApp {
     }
 
     /**
-     * Builds the one {@link NetworkManager} for this JVM. The configuration is a stand-in until the
-     * real JSON-backed {@link NetworkConfiguration} exists: it opens a topic per {@link
-     * ScenarioType}, so every type this server can create is publishable, and a new scenario type
-     * needs no change here beyond declaring its {@code topicName()}.
+     * Builds the one {@link NetworkManager} for this JVM from {@code config.json} on the classpath.
+     * No topics are opened here anymore — each scenario opens its own writer from the
+     * {@code topicName} it was created with (see {@link NetworkManager#openWriter(String)}).
      */
     private static NetworkManager buildNetwork() {
-        List<String> topicNames = Arrays.stream(ScenarioType.values()).map(ScenarioType::topicName).toList();
         return NetworkManager.builder()
-                .configuration(new NetworkConfiguration(ENVIRONMENT_ID, topicNames))
+                .configuration(loadConfiguration())
                 .build();
+    }
+
+    /** Reads {@code config.json} from the classpath into a {@link NetworkConfiguration} via Jackson. */
+    private static NetworkConfiguration loadConfiguration() {
+        ObjectMapper mapper = new ObjectMapper();
+        try (InputStream in = SimulationServerApp.class.getResourceAsStream(CONFIG_RESOURCE)) {
+            if (in == null) {
+                throw new IllegalStateException("Configuration resource not found on classpath: " + CONFIG_RESOURCE);
+            }
+            return mapper.readValue(in, NetworkConfiguration.class);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read " + CONFIG_RESOURCE, e);
+        }
     }
 }

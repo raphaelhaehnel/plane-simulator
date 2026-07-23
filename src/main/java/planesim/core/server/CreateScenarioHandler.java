@@ -29,8 +29,9 @@ final class CreateScenarioHandler extends AbstractJsonHandler {
     void handleRequest(HttpExchange exchange, Gson gson) throws IOException {
         CreateScenarioRequest request = readBody(exchange, gson, CreateScenarioRequest.class);
         ScenarioType type = RequestMapper.toScenarioType(request.type);
+        String topicName = RequestMapper.toTopicName(request);
         ScenarioConfig config = RequestMapper.toScenarioConfig(type, request);
-        Scenario scenario = manager.createScenario(type, config);
+        Scenario scenario = manager.createScenario(type, config, topicName);
         writeJson(exchange, 200, new CreateScenarioResponse(scenario.id()));
     }
 }

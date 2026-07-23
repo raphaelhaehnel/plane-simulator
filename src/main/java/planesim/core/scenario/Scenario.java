@@ -18,16 +18,18 @@ public final class Scenario {
 
     private final String id;
     private final ScenarioType type;
+    private final String topicName;
     private final ScenarioConfig config;
     private final SimulationEngine<?> engine;
     private final ScenarioPublisher publisher;
 
     private volatile ScenarioStatus status = ScenarioStatus.CREATED;
 
-    Scenario(String id, ScenarioType type, ScenarioConfig config, SimulationEngine<?> engine,
-             ScenarioPublisher publisher) {
+    Scenario(String id, ScenarioType type, String topicName, ScenarioConfig config,
+             SimulationEngine<?> engine, ScenarioPublisher publisher) {
         this.id = id;
         this.type = type;
+        this.topicName = topicName;
         this.config = config;
         this.engine = engine;
         this.publisher = publisher;
@@ -39,6 +41,11 @@ public final class Scenario {
 
     public ScenarioType type() {
         return type;
+    }
+
+    /** The network topic this scenario's objects are published on, chosen at creation time. */
+    public String topicName() {
+        return topicName;
     }
 
     public ScenarioConfig config() {
