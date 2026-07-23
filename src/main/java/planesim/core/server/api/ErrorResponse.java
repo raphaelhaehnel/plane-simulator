@@ -1,4 +1,4 @@
-package planesim.core.server.dto;
+package planesim.core.server.api;
 
 /** Response body for any non-2xx response. */
 public class ErrorResponse {

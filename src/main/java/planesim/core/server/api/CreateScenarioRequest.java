@@ -1,4 +1,4 @@
-package planesim.core.server.dto;
+package planesim.core.server.api;
 
 /** POST /createScenario request body. */
 public class CreateScenarioRequest {

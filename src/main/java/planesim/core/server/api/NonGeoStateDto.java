@@ -1,4 +1,4 @@
-package planesim.core.server.dto;
+package planesim.core.server.api;
 
 import java.util.Map;
 

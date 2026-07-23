@@ -10,12 +10,12 @@ import planesim.core.scenario.GeoLiveState;
 import planesim.core.scenario.NonGeoLiveState;
 import planesim.core.scenario.Scenario;
 import planesim.core.scenario.ScenarioType;
-import planesim.core.server.dto.CreateScenarioRequest;
-import planesim.core.server.dto.FormationDto;
-import planesim.core.server.dto.GeoStateDto;
-import planesim.core.server.dto.NonGeoStateDto;
-import planesim.core.server.dto.ScenarioDto;
-import planesim.core.server.dto.ScenarioIdRequest;
+import planesim.core.server.api.CreateScenarioRequest;
+import planesim.core.server.api.FormationDto;
+import planesim.core.server.api.GeoStateDto;
+import planesim.core.server.api.NonGeoStateDto;
+import planesim.core.server.api.ScenarioDto;
+import planesim.core.server.api.ScenarioIdRequest;
 
 import java.util.Locale;
 

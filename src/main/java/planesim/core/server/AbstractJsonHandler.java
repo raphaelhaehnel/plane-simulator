@@ -7,7 +7,7 @@ import com.sun.net.httpserver.HttpHandler;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import planesim.core.scenario.ScenarioLimitExceededException;
-import planesim.core.server.dto.ErrorResponse;
+import planesim.core.server.api.ErrorResponse;
 
 import java.io.IOException;
 import java.io.InputStreamReader;

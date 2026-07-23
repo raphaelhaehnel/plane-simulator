@@ -1,4 +1,4 @@
-package planesim.core.server.dto;
+package planesim.core.server.api;
 
 /** Wire shape of a formation spec: {@code type} is "LINE" or "CIRCLE"; only the matching fields are required. */
 public class FormationDto {

@@ -3,7 +3,7 @@ package planesim.core.server;
 import com.google.gson.Gson;
 import com.sun.net.httpserver.HttpExchange;
 import planesim.core.scenario.ScenarioManager;
-import planesim.core.server.dto.ScenarioDto;
+import planesim.core.server.api.ScenarioDto;
 
 import java.io.IOException;
 import java.util.List;

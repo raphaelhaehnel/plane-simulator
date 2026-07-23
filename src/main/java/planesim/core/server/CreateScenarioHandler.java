@@ -6,8 +6,8 @@ import planesim.core.engine.ScenarioConfig;
 import planesim.core.scenario.Scenario;
 import planesim.core.scenario.ScenarioManager;
 import planesim.core.scenario.ScenarioType;
-import planesim.core.server.dto.CreateScenarioRequest;
-import planesim.core.server.dto.CreateScenarioResponse;
+import planesim.core.server.api.CreateScenarioRequest;
+import planesim.core.server.api.CreateScenarioResponse;
 
 import java.io.IOException;
 

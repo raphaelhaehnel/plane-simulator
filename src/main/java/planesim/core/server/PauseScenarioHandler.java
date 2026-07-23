@@ -3,9 +3,9 @@ package planesim.core.server;
 import com.google.gson.Gson;
 import com.sun.net.httpserver.HttpExchange;
 import planesim.core.scenario.ScenarioManager;
-import planesim.core.server.dto.ErrorResponse;
-import planesim.core.server.dto.ScenarioIdRequest;
-import planesim.core.server.dto.ScenarioStatusResponse;
+import planesim.core.server.api.ErrorResponse;
+import planesim.core.server.api.ScenarioIdRequest;
+import planesim.core.server.api.ScenarioStatusResponse;
 
 import java.io.IOException;
 

@@ -2,7 +2,7 @@ package planesim.view.ui;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-import planesim.core.server.dto.ScenarioDto;
+import planesim.core.server.api.ScenarioDto;
 
 import java.io.IOException;
 import java.lang.reflect.Type;

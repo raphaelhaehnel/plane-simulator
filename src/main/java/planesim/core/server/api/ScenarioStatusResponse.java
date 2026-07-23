@@ -1,4 +1,4 @@
-package planesim.core.server.dto;
+package planesim.core.server.api;
 
 /** POST /start and POST /pause response body. */
 public class ScenarioStatusResponse {

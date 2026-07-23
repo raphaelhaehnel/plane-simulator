@@ -1,7 +1,7 @@
 package planesim.view.ui;
 
-import planesim.core.server.dto.GeoStateDto;
-import planesim.core.server.dto.ScenarioDto;
+import planesim.core.server.api.GeoStateDto;
+import planesim.core.server.api.ScenarioDto;
 
 import javax.swing.JFrame;
 import javax.swing.JLabel;

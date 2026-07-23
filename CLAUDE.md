@@ -216,7 +216,7 @@ planesim.core                    all logic + the HTTP API — what ships to the 
   planesim.core.network            NetworkManager (+ Builder), NetworkConfiguration, NetworkWriter —
                                     the network layer, ships to the real environment
   planesim.core.server              SimulationServerApp, com.sun.net.httpserver handlers, RequestMapper
-  planesim.core.server.dto          JSON wire-format DTOs
+  planesim.core.server.api          JSON wire-format DTOs
 
 planesim.external                 Entity + Plane/Radar/Weather + Topic — mocks, deleted on real integration
 
@@ -524,7 +524,7 @@ would be sub-pixel on any real map projection. Poll-thread UI mutations are wrap
   `NonGeoScenarioConfig`, `LineFormation`, `CircleFormation` reject negative/non-positive values and
   an `objectCount` above `ScenarioConfig.MAX_OBJECT_COUNT`; `GeoScenarioConfig` additionally rejects
   a near-pole `originLatRad`; `NonGeoLiveState` wraps its field map unmodifiable). The HTTP API's wire-format types
-  (`planesim.core.server.dto.*`) are the one deliberate exception — plain public classes with
+  (`planesim.core.server.api.*`) are the one deliberate exception — plain public classes with
   public fields, not records, since they're unvalidated JSON transfer objects (validation happens
   once, explicitly, in `RequestMapper`) and Gson deserialization of absent/optional JSON fields is
   simplest against plain mutable fields.
