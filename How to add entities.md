@@ -85,6 +85,8 @@ Pick a `MovementStyle`:
 
 Only if neither fits do you write a new `FlightBehavior` implementation (in
 `planesim.core.behavior`) and wire it into `FormationPlanner`'s `movementStyle == ...` branches.
+(If what you actually want is a new placement/motion *pattern* rather than a new object type, see
+"How to add formation.md" instead.)
 
 ### 4. Registering the type — `ScenarioType` + one factory constant
 
