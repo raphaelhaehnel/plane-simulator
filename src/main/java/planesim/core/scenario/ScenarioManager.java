@@ -64,7 +64,7 @@ public final class ScenarioManager {
                     "Maximum number of concurrent scenarios (" + MAX_SCENARIOS + ") reached; delete an existing one first");
         }
         String id = UUID.randomUUID().toString();
-        ScenarioPublisher publisher = new ScenarioPublisher(network, topicName);
+        ScenarioPublisher publisher = new ScenarioPublisher(network, topicName, type.category());
         ScenarioEngineFactory factory = engineFactories.get(type);
         SimulationEngine<?> engine = factory.createEngine(config, publisher, sharedScheduler);
         network.openWriter(topicName);

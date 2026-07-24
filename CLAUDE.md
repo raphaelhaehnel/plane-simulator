@@ -121,11 +121,13 @@ real types from the host system:
   (and its subpackages, including `core.server` — the HTTP API — and `core.network` — the network
   layer — both production code, they ship too) is needed in the real environment.
 - Point the imports of `Entity`/`Plane`/`Radar`/`Weather`/`Topic` at the host system's real classes
-  instead (they're referenced from `planesim.core.engine.ObjectWriters`/`ValueGenerators`,
-  `planesim.core.scenario.ScenarioPublisher`/`ScenarioManager`/`NonGeoFieldReader`, and
-  `planesim.core.network.{NetworkManager,NetworkWriter}` — `Entity` everywhere objects are sent,
-  `Topic` only inside `core.network`. No part of `core.server` references them, it only ever deals
-  with `core.scenario`'s already-abstracted `ScenarioConfig`/`Scenario` types).
+  instead. The concrete types (`Plane`/`Radar`/`Weather`) are referenced only from
+  `planesim.core.engine.ObjectWriters`/`ValueGenerators` and
+  `planesim.core.scenario.ScenarioEngineFactories`; `Entity` alone is referenced from
+  `planesim.core.scenario.ScenarioPublisher`/`GeoFieldReader`/`NonGeoFieldReader` and
+  `planesim.core.network.{NetworkManager,NetworkWriter}`; `Topic` only inside `core.network`. No
+  part of `core.server` references them, it only ever deals with `core.scenario`'s
+  already-abstracted `ScenarioConfig`/`Scenario` types.
 - `NetworkManager` is a singleton built exactly once at startup
   (`builder().configuration(...).build()`, read back via `getInstance()`) exposing three methods:
   `void openWriter(String topicName)`, `void closeWriter(String topicName)`, and
@@ -176,9 +178,12 @@ question that matters is: does the new type have coordinates (geographic) or not
    `ScenarioManager` itself never needs to change. No topic is declared here anymore — the topic
    name comes from the `topicName` on each `POST /createScenario`, and `ScenarioManager` opens the
    writer for it on create / closes it on delete.
-5. In `planesim.core.scenario.ScenarioPublisher`, add a `send(YourType obj)` method that records
-   into the existing `latestGeoByIndex` map via a new `GeoLiveState` (same shape as plane/radar —
-   just lat/lon/heading, nothing new to define), then calls the shared `publish(obj)`.
+
+That's it — `ScenarioPublisher` needs **no** change: its single `send(Entity)` records geographic
+live state generically via `GeoFieldReader`, which reads the `latitude`/`longitude` (and optional
+`heading`) public fields every geographic external type must expose anyway (see the integration
+contract above). Just make sure your type uses those field names — they're the contract, not a
+suggestion.
 
 **Non-geographic** (no coordinates at all — like `Weather`):
 1. Add the placeholder class to `planesim.external`, extending `Entity`. `NetworkManager` needs no
@@ -189,13 +194,13 @@ question that matters is: does the new type have coordinates (geographic) or not
    `planesim.core.scenario.ScenarioEngineFactories` (+ its `DEFAULTS` map) that calls
    `SimulationEngine.createValueEngine(...)`. `ScenarioManager` itself never needs to change (the
    topic name comes from the request's `topicName`, not the type).
-4. In `ScenarioPublisher`, add a `send(YourType obj)` method that's a **two-line delegation to
-   the existing `recordNonGeo(obj)` + `publish(obj)`** — that's it. No new record, no new DTO, no new
-   `RequestMapper` branch. `NonGeoLiveState`/`NonGeoStateDto` are already generic (a
-   `Map<String, Object>` of whatever public fields your type has, captured via reflection — see
-   `NonGeoFieldReader`), specifically so this step never grows.
-5. **Don't** add it to `planesim.view.ui` — the UI only ever renders geographic objects, by design
+4. **Don't** add it to `planesim.view.ui` — the UI only ever renders geographic objects, by design
    (see "What this is" above).
+
+That's it — `ScenarioPublisher` needs **no** change: its single `send(Entity)` records
+non-geographic live state generically. `NonGeoLiveState`/`NonGeoStateDto` are already generic (a
+`Map<String, Object>` of whatever public fields your type has, captured via reflection — see
+`NonGeoFieldReader`). No new record, no new DTO, no new `RequestMapper` branch.
 
 In both cases, `ScenarioType`'s `category()` is what `RequestMapper.toScenarioConfig` dispatches
 on to decide between building a `GeoScenarioConfig` or `NonGeoScenarioConfig`, so once the category
@@ -212,7 +217,7 @@ planesim.core                    all logic + the HTTP API — what ships to the 
   planesim.core.behavior           FlightBehavior + LineBounceBehavior/CircleRandomWalkBehavior/StaticBehavior
   planesim.core.formation          FormationSpec, LineFormation, CircleFormation
   planesim.core.geo                Vector2, GeoMath
-  planesim.core.scenario           ScenarioType/Status/Category, GeoLiveState, NonGeoLiveState(+FieldReader),
+  planesim.core.scenario           ScenarioType/Status/Category, Geo/NonGeoLiveState (+ Geo/NonGeoFieldReader),
                                     ScenarioEngineFactory(ies), ScenarioLimitExceededException,
                                     ScenarioPublisher, Scenario, ScenarioManager
   planesim.core.network            NetworkManager (+ Builder), NetworkConfiguration, NetworkWriter —
@@ -253,7 +258,8 @@ because the public `ScenarioEngineFactory` names it as a parameter type — its 
 still package-private, since only `ScenarioManager` ever builds one). Types only ever constructed
 by a class in their own package kept their package-private visibility:
 `SimulatedEntity`/`SimulatedObject`/`SimulatedValue` (all in `core.engine`),
-`MapPanel`/`PlaneSnapshot` (in `view.ui`), `NonGeoFieldReader` (in `core.scenario`), and
+`MapPanel`/`PlaneSnapshot` (in `view.ui`), `GeoFieldReader`/`NonGeoFieldReader` (in
+`core.scenario`), and
 `NetworkWriter` (in `core.network`, constructed/closed only by `NetworkManager`).
 
 ## Architecture
@@ -368,28 +374,30 @@ enforces `MAX_SCENARIOS` (100), throwing `ScenarioLimitExceededException` (mappe
 `AbstractJsonHandler`) once reached — a soft, approximate cap (the check-then-put isn't atomic
 under concurrent creates), meant only to stop unbounded growth, not to be a precise quota.
 
-**`ScenarioPublisher`: one scenario's outbound end.** It does two things per object per tick, and
-its `send(...)` methods are the *only* place the two meet: (1) **publish** — one shared
-`publish(Entity)` call forwarding to `NetworkManager.send(entity, topicName)` with the topic the
-scenario was created with (passed into the `ScenarioPublisher` constructor), uniform across all
-types since everything is an `Entity`; and (2)
-**record** the object's latest published state keyed by object identity, so `core.server`'s
+**`ScenarioPublisher`: one scenario's outbound end.** It has exactly one `send(Entity)` method —
+shared by every object type, so adding a new type (geographic or not) never touches this class —
+that does two things per object per tick: (1) **publish** — forward to
+`NetworkManager.send(entity, topicName)` with the topic the scenario was created with (passed into
+the `ScenarioPublisher` constructor), uniform across all types since everything is an `Entity`;
+and (2) **record** the object's latest published state keyed by object identity, so `core.server`'s
 `GET /getScenarios` handler has something to serve — thread-safe since HTTP handler threads read
-it concurrently with the tick thread writing it. One `send(...)` method exists per object type (a
-scenario is always homogeneous, so only one is ever actually exercised per instance) purely
-because the engine binds a method reference to whichever `T` it was created with. Recording, unlike
-publishing, splits geographic from non-geographic into two separate maps, because their live-state
-shapes have nothing in common:
-- Geographic (`send(Plane)`/`send(Radar)`/...) → `GeoLiveState(index, latRad, lonRad, headingDeg)`
-  — always this same shape, so it's built directly, field by field.
-- Non-geographic (`send(Weather)`/...) → all delegate to one private `recordNonGeo(Entity target)`
-  helper, which builds a `NonGeoLiveState(index, Map<String,Object> fields)` by reading every
-  public instance field off `target` via reflection (`NonGeoFieldReader.readFields`). This is the
-  key generality move: a non-geographic object's fields are arbitrary and type-specific (weather's
-  are `windVelocity`/`temperature`/`isSunny`; a future one could be anything), so instead of a
-  hand-written record + DTO + mapping function per type, the *shape itself* is generic — adding a
-  new non-geographic type only ever requires a one-line `send(...)` override that calls
-  `recordNonGeo`, nothing else in `scenario` or `server.api` changes.
+it concurrently with the tick thread writing it. Recording, unlike publishing, splits geographic
+from non-geographic into two separate maps, because their live-state shapes have nothing in
+common; the split is decided by the scenario's `ScenarioCategory`, fixed at construction (passed by
+`ScenarioManager` from `type.category()` — a scenario is always homogeneous, so only one of the two
+maps is ever populated per instance). Both shapes are captured *generically*, via reflection, off
+the just-published external object:
+- Geographic → `GeoLiveState(index, latRad, lonRad, headingDeg)` — always this same shape, built
+  by `GeoFieldReader` reading the `latitude`/`longitude` public fields (and `heading` if present —
+  a static type like radar has none, and gets `0.0`). Those field names aren't a local invention to
+  keep in sync: they're the documented integration contract every geographic external type must
+  expose anyway (see "Integrating the real Plane / Radar / Weather / Entity / Topic").
+- Non-geographic → `NonGeoLiveState(index, Map<String,Object> fields)`, built by
+  `NonGeoFieldReader.readFields` reading *every* public instance field. This is the key generality
+  move: a non-geographic object's fields are arbitrary and type-specific (weather's are
+  `windVelocity`/`temperature`/`isSunny`; a future one could be anything), so instead of a
+  hand-written record + DTO + mapping function per type, the *shape itself* is generic — nothing in
+  `scenario` or `server.api` changes for a new type.
 
 Continuing `ScenarioManager`: `createScenario` also opens the scenario's network writer
 (`network.openWriter(topicName)`) as part of registering it. `start`/`pause`/`delete` all key off the

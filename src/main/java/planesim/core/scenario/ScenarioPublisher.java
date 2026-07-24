@@ -2,9 +2,6 @@ package planesim.core.scenario;
 
 import planesim.core.network.NetworkManager;
 import planesim.external.Entity;
-import planesim.external.Plane;
-import planesim.external.Radar;
-import planesim.external.Weather;
 
 import java.util.Collections;
 import java.util.Comparator;
@@ -19,16 +16,15 @@ import java.util.concurrent.atomic.AtomicInteger;
  * scenario's {@link NetworkManager} topic and (2) recorded as this object's latest state, so
  * {@code core.server}'s {@code GET /getScenarios} has a live snapshot to serve.
  *
- * <p>A scenario is always homogeneous (all one object type, never mixed), so only one {@code
- * send(...)} overload is ever exercised per instance; they all exist because the engine binds a
- * method reference for whichever type it was created with (see {@link ScenarioEngineFactories}).
- * Publishing is uniform — every external object is an {@link Entity}, so it's one shared {@link
- * #publish} call — but recording is not: geographic objects (plane/radar) and non-geographic ones
- * (weather) are tracked in separate maps since their live-state shapes have nothing in common
- * ({@link GeoLiveState} is always lat/lon/heading; {@link NonGeoLiveState} is a generic field map,
- * captured via {@link NonGeoFieldReader} so a new non-geographic object type never needs a new
- * map/method here — just a one-line {@code send(...)} overload that calls {@link #recordNonGeo}).
- * Only one of the two maps is ever populated per scenario instance.
+ * <p>Fully type-agnostic: there is exactly one {@link #send(Entity)} method, shared by every
+ * object type — adding a new external type (geographic or not) never touches this class.
+ * Publishing is uniform since every external object is an {@link Entity}. Recording dispatches on
+ * the scenario's {@link ScenarioCategory} (fixed at construction — a scenario is always
+ * homogeneous) into one of two maps, because the two live-state shapes have nothing in common:
+ * geographic state is always lat/lon/heading ({@link GeoLiveState}, captured via
+ * {@link GeoFieldReader}), non-geographic state is a generic field map ({@link NonGeoLiveState},
+ * captured via {@link NonGeoFieldReader}). Only one of the two maps is ever populated per
+ * scenario instance.
  *
  * <p>Thread-safe because HTTP handler threads read {@link #geoSnapshot()}/{@link #nonGeoSnapshot()}
  * concurrently with the scenario's own tick thread calling {@code send}.
@@ -40,6 +36,7 @@ public final class ScenarioPublisher {
 
     private final NetworkManager network;
     private final String topicName;
+    private final ScenarioCategory category;
 
     private final Map<Object, Integer> indexByObject = Collections.synchronizedMap(new IdentityHashMap<>());
     private final AtomicInteger nextIndex = new AtomicInteger();
@@ -47,35 +44,20 @@ public final class ScenarioPublisher {
     private final Map<Integer, GeoLiveState> latestGeoByIndex = new ConcurrentHashMap<>();
     private final Map<Integer, NonGeoLiveState> latestNonGeoByIndex = new ConcurrentHashMap<>();
 
-    ScenarioPublisher(NetworkManager network, String topicName) {
+    ScenarioPublisher(NetworkManager network, String topicName, ScenarioCategory category) {
         this.network = network;
         this.topicName = topicName;
+        this.category = category;
     }
 
-    public void send(Plane plane) {
-        int index = indexFor(plane);
-        latestGeoByIndex.put(index, new GeoLiveState(index, plane.latitude, plane.longitude, plane.heading));
-        publish(plane);
-    }
-
-    public void send(Radar radar) {
-        int index = indexFor(radar);
-        latestGeoByIndex.put(index, new GeoLiveState(index, radar.latitude, radar.longitude, 0.0));
-        publish(radar);
-    }
-
-    public void send(Weather weather) {
-        recordNonGeo(weather);
-        publish(weather);
-    }
-
-    /** Any future non-geographic {@code send(...)} overload can just delegate here — no new record/DTO needed. */
-    private void recordNonGeo(Entity target) {
-        int index = indexFor(target);
-        latestNonGeoByIndex.put(index, new NonGeoLiveState(index, NonGeoFieldReader.readFields(target)));
-    }
-
-    private void publish(Entity entity) {
+    /** Records {@code entity}'s current state as this object's latest, then publishes it on the scenario's topic. */
+    public void send(Entity entity) {
+        int index = indexFor(entity);
+        if (category == ScenarioCategory.GEOGRAPHIC) {
+            latestGeoByIndex.put(index, GeoFieldReader.readState(index, entity));
+        } else {
+            latestNonGeoByIndex.put(index, new NonGeoLiveState(index, NonGeoFieldReader.readFields(entity)));
+        }
         network.send(entity, topicName);
     }
 
