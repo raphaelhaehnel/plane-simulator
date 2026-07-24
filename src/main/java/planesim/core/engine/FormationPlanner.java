@@ -3,9 +3,11 @@ package planesim.core.engine;
 import planesim.core.behavior.CircleRandomWalkBehavior;
 import planesim.core.behavior.FlightBehavior;
 import planesim.core.behavior.LineBounceBehavior;
+import planesim.core.behavior.OrbitBehavior;
 import planesim.core.behavior.StaticBehavior;
 import planesim.core.formation.CircleFormation;
 import planesim.core.formation.LineFormation;
+import planesim.core.formation.OrbitFormation;
 import planesim.core.geo.GeoMath;
 import planesim.core.geo.Vector2;
 
@@ -39,6 +41,9 @@ public final class FormationPlanner {
         }
         if (config.formation() instanceof CircleFormation circle) {
             return buildCircleFormation(config, circle, movementStyle, objectFactory, writer);
+        }
+        if (config.formation() instanceof OrbitFormation orbit) {
+            return buildOrbitFormation(config, orbit, movementStyle, objectFactory, writer);
         }
         throw new IllegalStateException("Unhandled formation type: " + config.formation());
     }
@@ -131,6 +136,45 @@ public final class FormationPlanner {
             FlightBehavior behavior = movementStyle == MovementStyle.STATIC
                     ? new StaticBehavior()
                     : new CircleRandomWalkBehavior(random);
+
+            T object = objectFactory.get();
+            formation.add(new SimulatedObject<>(object, originLatRad, originLonRad, config.altitudeMeters(),
+                    position, velocity, behavior, writer));
+        }
+        return formation;
+    }
+
+    /**
+     * N objects evenly spaced around a circle of the configured radius, centered on the origin —
+     * same placement as {@link #buildCircleFormation}, except a single object goes <em>on</em> the
+     * ring (due east), not at the center, since an orbiting object needs a ring to fly. A
+     * {@link MovementStyle#MOBILE} object flies along the circle in the tangent direction,
+     * clockwise, forever (see {@link OrbitBehavior}); a {@link MovementStyle#STATIC} object just
+     * stays put. The initial velocity already points along the clockwise tangent so the very first
+     * published tick matches the motion that follows.
+     */
+    private static <T> List<SimulatedEntity<T>> buildOrbitFormation(GeoScenarioConfig config, OrbitFormation orbit,
+                                                                      MovementStyle movementStyle,
+                                                                      Supplier<T> objectFactory, ObjectWriter<T> writer) {
+        double originLatRad = config.originLatRad();
+        double originLonRad = config.originLonRad();
+
+        int n = config.objectCount();
+        List<SimulatedEntity<T>> formation = new ArrayList<>(n);
+
+        for (int i = 0; i < n; i++) {
+            double angleRad = i * (2.0 * Math.PI / n);
+            Vector2 position = new Vector2(Math.cos(angleRad), Math.sin(angleRad)).scaled(orbit.radiusMeters());
+            // Clockwise tangent at angle a is (sin a, -cos a) — see OrbitBehavior.
+            Vector2 tangent = new Vector2(Math.sin(angleRad), -Math.cos(angleRad));
+
+            // A static object never has velocity, not even on its very first published tick.
+            Vector2 velocity = movementStyle == MovementStyle.STATIC
+                    ? Vector2.ZERO
+                    : tangent.scaled(config.speedMps());
+            FlightBehavior behavior = movementStyle == MovementStyle.STATIC
+                    ? new StaticBehavior()
+                    : new OrbitBehavior(orbit.radiusMeters(), config.speedMps(), angleRad);
 
             T object = objectFactory.get();
             formation.add(new SimulatedObject<>(object, originLatRad, originLonRad, config.altitudeMeters(),

@@ -6,6 +6,7 @@ import planesim.core.engine.ScenarioConfig;
 import planesim.core.formation.CircleFormation;
 import planesim.core.formation.FormationSpec;
 import planesim.core.formation.LineFormation;
+import planesim.core.formation.OrbitFormation;
 import planesim.core.scenario.GeoLiveState;
 import planesim.core.scenario.NonGeoLiveState;
 import planesim.core.scenario.Scenario;
@@ -125,6 +126,9 @@ public final class RequestMapper {
         } else if (spec instanceof CircleFormation circle) {
             dto.type = "CIRCLE";
             dto.radiusMeters = circle.radiusMeters();
+        } else if (spec instanceof OrbitFormation orbit) {
+            dto.type = "ORBIT";
+            dto.radiusMeters = orbit.radiusMeters();
         }
         return dto;
     }

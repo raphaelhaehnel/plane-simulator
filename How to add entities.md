@@ -7,8 +7,8 @@ This guide explains exactly what to do to add a new simulated object type (like 
 
 **Does the new type have coordinates (latitude/longitude) or not?**
 
-- **Geographic** — it has a position, gets placed by a formation (LINE/CIRCLE), and may move or
-  stay fixed. Examples: `Plane` (mobile), `Radar` (static).
+- **Geographic** — it has a position, gets placed by a formation (LINE/CIRCLE/ORBIT), and may move
+  or stay fixed. Examples: `Plane` (mobile), `Radar` (static).
 - **Non-geographic** — it has no position at all; its field values are just regenerated every
   tick. Example: `Weather`.
 

@@ -1,6 +1,6 @@
 package planesim.core.server.api;
 
-/** Wire shape of a formation spec: {@code type} is "LINE" or "CIRCLE"; only the matching fields are required. */
+/** Wire shape of a formation spec: {@code type} is "LINE", "CIRCLE", or "ORBIT"; only the matching fields are required. */
 public class FormationDto {
     public String type;
 
@@ -9,6 +9,6 @@ public class FormationDto {
     public Double destLonRad;
     public Double spacingMeters;
 
-    // CIRCLE only, required
+    // CIRCLE and ORBIT, required
     public Double radiusMeters;
 }

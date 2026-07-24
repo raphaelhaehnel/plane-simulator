@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 A standalone simulation module that drives simulated objects — some geographic (planes, radars;
-placed in a line or circle pattern and, for mobile ones, flown), one non-geographic (weather; no
+placed in a line, circle, or orbit pattern and, for mobile ones, flown), one non-geographic (weather; no
 position at all) — and periodically publishes each object's state to a `NetworkManager`. **The one
 distinction that matters architecturally is geographic vs. non-geographic** — not "plane vs. radar
 vs. weather" — see "Adding a new object type" below.
@@ -214,8 +214,8 @@ planesim.core                    all logic + the HTTP API — what ships to the 
   planesim.core.engine             SimulationEngine, SimulatedObject/SimulatedValue/SimulatedEntity,
                                     ObjectWriter(s), ValueGenerator(s), MovementStyle, FormationPlanner,
                                     GeoScenarioConfig, NonGeoScenarioConfig, ScenarioConfig
-  planesim.core.behavior           FlightBehavior + LineBounceBehavior/CircleRandomWalkBehavior/StaticBehavior
-  planesim.core.formation          FormationSpec, LineFormation, CircleFormation
+  planesim.core.behavior           FlightBehavior + LineBounceBehavior/CircleRandomWalkBehavior/OrbitBehavior/StaticBehavior
+  planesim.core.formation          FormationSpec, LineFormation, CircleFormation, OrbitFormation
   planesim.core.geo                Vector2, GeoMath
   planesim.core.scenario           ScenarioType/Status/Category, Geo/NonGeoLiveState (+ Geo/NonGeoFieldReader),
                                     ScenarioEngineFactory(ies), ScenarioLimitExceededException,
@@ -421,6 +421,10 @@ shared), so a behavior can hold private mutable state without synchronization:
   turn angle (sigma = 45°, i.e. a 90° turn is 2 sigma), which changes heading while preserving
   speed exactly (rotation doesn't change vector length). Not scaled by `dtSeconds`, so a shorter
   publish interval means visually more erratic turning.
+- `OrbitBehavior` — flies a perfect circle around the local-frame origin, clockwise (north-up:
+  east → south → west → north), at constant tangential speed (angular speed = speed/radius). It
+  tracks its own polar angle and re-derives position/velocity from it each tick rather than
+  integrating the velocity — integrating a rotating velocity would spiral outward off the circle.
 - `StaticBehavior` — every tick returns the exact same position with zero velocity, regardless of
   whatever initial velocity the formation assigned (e.g. a radar). `FormationPlanner` also zeroes
   out the *initial* velocity it hands a static object, so even the very first published tick — before
@@ -436,8 +440,8 @@ tick, unlike a formation's placement RNG which is drawn once at construction on 
 `ThreadLocalRandom` is the correct/contention-free choice here).
 
 **Formation construction** (geographic objects only). `FormationPlanner.buildFormation` dispatches
-on the sealed `FormationSpec` (`LineFormation` | `CircleFormation`, pattern-matched via
-`instanceof`) to build the initial list of `SimulatedEntity<T>`s (concretely, `SimulatedObject<T>`s)
+on the sealed `FormationSpec` (`LineFormation` | `CircleFormation` | `OrbitFormation`,
+pattern-matched via `instanceof`) to build the initial list of `SimulatedEntity<T>`s (concretely, `SimulatedObject<T>`s)
 with their starting positions, velocities, and behaviors — generic over `T`, so the exact same
 geometry code places planes, radars, or any future geographic object type; only the
 `MovementStyle` parameter decides which `FlightBehavior` gets attached:
@@ -449,6 +453,11 @@ geometry code places planes, radars, or any future geographic object type; only 
   undefined at the center); for n>1, objects are spaced `360/n` degrees apart starting due east,
   each initially facing radially outward, then — if `MOBILE` — wandering independently via random
   walk; a `STATIC` object just stays put.
+- Orbit: same ring placement as circle (`360/n` degrees apart starting due east), except n=1 goes
+  *on* the ring (due east), not at the center — an orbiting object needs a ring to fly. Initial
+  velocity points along the clockwise tangent (`(sin a, -cos a)` at polar angle `a`), matching the
+  motion `OrbitBehavior` then continues, so the first published tick is already consistent; a
+  `STATIC` object just stays put on the ring.
 
 Non-geographic objects (weather) skip `FormationPlanner` entirely — `SimulationEngine.createValueEngine`
 just builds `config.objectCount()` independent `SimulatedValue`s directly, no placement geometry
@@ -542,9 +551,10 @@ would be sub-pixel on any real map projection. Poll-thread UI mutations are wrap
   a Java visibility constraint, not license to make everything public; see "Package structure"
   above for which types are public out of necessity vs. by design.
 - Records (`Vector2`, `StepResult`, `PlaneSnapshot`, `GeoScenarioConfig`, `NonGeoScenarioConfig`,
-  `LineFormation`, `CircleFormation`, `GeoLiveState`, `NonGeoLiveState`) are used for immutable
+  `LineFormation`, `CircleFormation`, `OrbitFormation`, `GeoLiveState`, `NonGeoLiveState`) are used
+  for immutable
   internal value types; compact constructors validate invariants (e.g. `GeoScenarioConfig`,
-  `NonGeoScenarioConfig`, `LineFormation`, `CircleFormation` reject negative/non-positive values and
+  `NonGeoScenarioConfig`, `LineFormation`, `CircleFormation`/`OrbitFormation` reject negative/non-positive values and
   an `objectCount` above `ScenarioConfig.MAX_OBJECT_COUNT`; `GeoScenarioConfig` additionally rejects
   a near-pole `originLatRad`; `NonGeoLiveState` wraps its field map unmodifiable). The HTTP API's wire-format types
   (`planesim.core.server.api.*`) are the one deliberate exception — plain public classes with

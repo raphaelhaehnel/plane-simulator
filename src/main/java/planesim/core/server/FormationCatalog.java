@@ -3,6 +3,7 @@ package planesim.core.server;
 import planesim.core.formation.CircleFormation;
 import planesim.core.formation.FormationSpec;
 import planesim.core.formation.LineFormation;
+import planesim.core.formation.OrbitFormation;
 import planesim.core.server.api.FormationDto;
 
 import java.util.List;
@@ -36,7 +37,10 @@ final class FormationCatalog {
                     FormationCatalog::parseLine),
             new Descriptor("CIRCLE",
                     List.of(new Field("radiusMeters", "Radius (m)")),
-                    FormationCatalog::parseCircle));
+                    FormationCatalog::parseCircle),
+            new Descriptor("ORBIT",
+                    List.of(new Field("radiusMeters", "Radius (m)")),
+                    FormationCatalog::parseOrbit));
 
     private FormationCatalog() {
     }
@@ -68,5 +72,12 @@ final class FormationCatalog {
             throw new BadRequestException("CIRCLE formation requires radiusMeters");
         }
         return new CircleFormation(dto.radiusMeters);
+    }
+
+    private static FormationSpec parseOrbit(FormationDto dto) {
+        if (dto.radiusMeters == null) {
+            throw new BadRequestException("ORBIT formation requires radiusMeters");
+        }
+        return new OrbitFormation(dto.radiusMeters);
     }
 }
