@@ -11,13 +11,18 @@ import planesim.core.scenario.NonGeoLiveState;
 import planesim.core.scenario.Scenario;
 import planesim.core.scenario.ScenarioType;
 import planesim.core.server.api.CreateScenarioRequest;
+import planesim.core.server.api.FormationDescriptorDto;
 import planesim.core.server.api.FormationDto;
+import planesim.core.server.api.FormationFieldDto;
 import planesim.core.server.api.GeoStateDto;
 import planesim.core.server.api.NonGeoStateDto;
 import planesim.core.server.api.ScenarioDto;
 import planesim.core.server.api.ScenarioIdRequest;
+import planesim.core.server.api.ScenarioTypeDto;
 
+import java.util.Arrays;
 import java.util.Locale;
+import java.util.stream.Collectors;
 
 /**
  * Converts between the HTTP-facing DTOs and the internal domain model. Validation here is limited
@@ -41,7 +46,7 @@ public final class RequestMapper {
         try {
             return ScenarioType.valueOf(raw.toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            throw new BadRequestException("Unsupported scenario type: " + raw + " (must be PLANE, RADAR, or WEATHER)");
+            throw new BadRequestException("Unsupported scenario type: " + raw + " (must be one of " + typeNames() + ")");
         }
     }
 
@@ -74,9 +79,9 @@ public final class RequestMapper {
             throw new BadRequestException("originLatRad and originLonRad are required");
         }
         if (req.formation == null || req.formation.type == null) {
-            throw new BadRequestException("formation.type is required (LINE or CIRCLE)");
+            throw new BadRequestException("formation.type is required (one of " + FormationCatalog.names() + ")");
         }
-        FormationSpec formationSpec = toFormationSpec(req.formation);
+        FormationSpec formationSpec = FormationCatalog.parse(req.formation);
         double speed = req.speed != null ? req.speed : DEFAULT_SPEED_MPS;
         double altitude = req.altitude != null ? req.altitude : DEFAULT_ALTITUDE_M;
         return new GeoScenarioConfig(req.originLatRad, req.originLonRad, req.amount, speed, altitude,
@@ -85,24 +90,6 @@ public final class RequestMapper {
 
     private static NonGeoScenarioConfig toNonGeoScenarioConfig(CreateScenarioRequest req) {
         return new NonGeoScenarioConfig(req.amount, req.sendInterval);
-    }
-
-    private static FormationSpec toFormationSpec(FormationDto dto) {
-        return switch (dto.type.toUpperCase(Locale.ROOT)) {
-            case "LINE" -> {
-                if (dto.destLatRad == null || dto.destLonRad == null || dto.spacingMeters == null) {
-                    throw new BadRequestException("LINE formation requires destLatRad, destLonRad, spacingMeters");
-                }
-                yield new LineFormation(dto.destLatRad, dto.destLonRad, dto.spacingMeters);
-            }
-            case "CIRCLE" -> {
-                if (dto.radiusMeters == null) {
-                    throw new BadRequestException("CIRCLE formation requires radiusMeters");
-                }
-                yield new CircleFormation(dto.radiusMeters);
-            }
-            default -> throw new BadRequestException("formation.type must be LINE or CIRCLE, got: " + dto.type);
-        };
     }
 
     public static ScenarioDto toDto(Scenario scenario) {
@@ -149,6 +136,30 @@ public final class RequestMapper {
         dto.lonRad = state.lonRad();
         dto.headingDeg = state.headingDeg();
         return dto;
+    }
+
+    public static ScenarioTypeDto toTypeDto(ScenarioType type) {
+        ScenarioTypeDto dto = new ScenarioTypeDto();
+        dto.name = type.name();
+        dto.category = type.category().name();
+        return dto;
+    }
+
+    static FormationDescriptorDto toFormationDescriptorDto(FormationCatalog.Descriptor descriptor) {
+        FormationDescriptorDto dto = new FormationDescriptorDto();
+        dto.name = descriptor.name();
+        dto.fields = descriptor.fields().stream().map(field -> {
+            FormationFieldDto fieldDto = new FormationFieldDto();
+            fieldDto.name = field.name();
+            fieldDto.label = field.label();
+            return fieldDto;
+        }).toList();
+        return dto;
+    }
+
+    /** Comma-separated scenario type names, for error messages that enumerate the valid values. */
+    private static String typeNames() {
+        return Arrays.stream(ScenarioType.values()).map(Enum::name).collect(Collectors.joining(", "));
     }
 
     private static NonGeoStateDto toNonGeoDto(NonGeoLiveState state) {

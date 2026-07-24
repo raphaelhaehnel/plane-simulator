@@ -148,6 +148,8 @@ body {
 }
 .placeholder { color: var(--muted); font-size: 14px; }
 
+.load-error p { margin: 0 0 12px; font-size: 14px; color: var(--error); }
+
 .response-status { display: flex; align-items: center; gap: 10px; font-size: 14px; }
 .badge {
   padding: 3px 10px;

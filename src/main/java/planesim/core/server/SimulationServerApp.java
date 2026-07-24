@@ -16,8 +16,9 @@ import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * Entry point for the HTTP API: exposes {@code POST /createScenario}, {@code GET /getScenarios},
- * {@code POST /deleteScenario}, {@code POST /start}, {@code POST /pause}, and
- * {@code POST /stopAll} over a {@link ScenarioManager}. All scenarios' ticking shares one bounded
+ * {@code GET /getTypes}, {@code GET /getFormations}, {@code POST /deleteScenario},
+ * {@code POST /start}, {@code POST /pause}, and {@code POST /stopAll} over a
+ * {@link ScenarioManager}. All scenarios' ticking shares one bounded
  * {@link ScheduledExecutorService} (see {@code SimulationEngine}'s javadoc for why that's safe),
  * separate from the pool that serves incoming HTTP requests.
  */
@@ -41,6 +42,8 @@ public final class SimulationServerApp {
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/createScenario", new CreateScenarioHandler(manager));
         server.createContext("/getScenarios", new GetScenariosHandler(manager));
+        server.createContext("/getTypes", new GetTypesHandler());
+        server.createContext("/getFormations", new GetFormationsHandler());
         server.createContext("/deleteScenario", new DeleteScenarioHandler(manager));
         server.createContext("/start", new StartScenarioHandler(manager));
         server.createContext("/pause", new PauseScenarioHandler(manager));

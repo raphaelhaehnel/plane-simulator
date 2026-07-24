@@ -4,7 +4,7 @@
  * — this one only needs changes for new *kinds* of behavior (e.g. a new input
  * kind), not for new endpoints or fields.
  */
-import { ENDPOINTS } from "./endpoints.js";
+import { buildEndpoints } from "./endpoints.js";
 
 const nav = document.getElementById("nav");
 const formPanel = document.getElementById("form-panel");
@@ -15,10 +15,28 @@ const savedValues = {};
 /** Scenario ids seen in any response, newest first. */
 let knownIds = [];
 
-let current = ENDPOINTS[0];
+let endpoints = [];
+let current = null;
 
-function init() {
-  for (const ep of ENDPOINTS) {
+/**
+ * Fetches the scenario types and formations from the simulator, then builds the
+ * whole UI from them — a type/formation added in the backend appears here
+ * without any UI change.
+ */
+async function init() {
+  try {
+    const [types, formations] = await Promise.all([
+      fetchJson("/api/getTypes"),
+      fetchJson("/api/getFormations")
+    ]);
+    endpoints = buildEndpoints({ types, formations });
+  } catch (e) {
+    showLoadError(e.message);
+    return;
+  }
+
+  nav.innerHTML = "";
+  for (const ep of endpoints) {
     const btn = document.createElement("button");
     btn.className = "nav-item";
     btn.dataset.endpoint = ep.id;
@@ -26,7 +44,30 @@ function init() {
     btn.addEventListener("click", () => select(ep));
     nav.appendChild(btn);
   }
-  select(current);
+  select(endpoints[0]);
+}
+
+async function fetchJson(url) {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`${url} responded ${res.status}`);
+  }
+  return res.json();
+}
+
+function showLoadError(message) {
+  formPanel.innerHTML = "";
+  const box = document.createElement("div");
+  box.className = "load-error";
+  const text = document.createElement("p");
+  text.textContent = `Could not load scenario types/formations from the simulator (${message}). ` +
+    "Make sure the simulator is running, then retry.";
+  const retry = document.createElement("button");
+  retry.className = "send";
+  retry.textContent = "Retry";
+  retry.addEventListener("click", init);
+  box.append(text, retry);
+  formPanel.appendChild(box);
 }
 
 function select(ep) {

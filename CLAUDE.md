@@ -102,6 +102,8 @@ curl -X POST http://localhost:8080/createScenario -H "Content-Type: application/
   "type":"WEATHER","topicName":"weather","amount":3,"sendInterval":500
 }'
 curl http://localhost:8080/getScenarios
+curl http://localhost:8080/getTypes
+curl http://localhost:8080/getFormations
 curl -X POST http://localhost:8080/start  -H "Content-Type: application/json" -d '{"id":"<id>"}'
 curl -X POST http://localhost:8080/pause  -H "Content-Type: application/json" -d '{"id":"<id>"}'
 curl -X POST http://localhost:8080/stopAll
@@ -215,7 +217,8 @@ planesim.core                    all logic + the HTTP API — what ships to the 
                                     ScenarioPublisher, Scenario, ScenarioManager
   planesim.core.network            NetworkManager (+ Builder), NetworkConfiguration, NetworkWriter —
                                     the network layer, ships to the real environment
-  planesim.core.server              SimulationServerApp, com.sun.net.httpserver handlers, RequestMapper
+  planesim.core.server              SimulationServerApp, com.sun.net.httpserver handlers, RequestMapper,
+                                    FormationCatalog
   planesim.core.server.api          JSON wire-format DTOs
 
 planesim.external                 Entity + Plane/Radar/Weather + Topic — mocks, deleted on real integration
@@ -443,9 +446,10 @@ Non-geographic objects (weather) skip `FormationPlanner` entirely — `Simulatio
 just builds `config.objectCount()` independent `SimulatedValue`s directly, no placement geometry
 involved.
 
-**HTTP API.** `SimulationServerApp` (in `core.server`) wires six `com.sun.net.httpserver` handlers
-(one per endpoint: `POST /createScenario`, `GET /getScenarios`, `POST /deleteScenario`, `POST
-/start`, `POST /pause`, `POST /stopAll`) over a `ScenarioManager`, on top of one shared
+**HTTP API.** `SimulationServerApp` (in `core.server`) wires eight `com.sun.net.httpserver`
+handlers (one per endpoint: `POST /createScenario`, `GET /getScenarios`, `GET /getTypes`,
+`GET /getFormations`, `POST /deleteScenario`, `POST /start`, `POST /pause`, `POST /stopAll`) over
+a `ScenarioManager`, on top of one shared
 bounded `Executors.newFixedThreadPool(HTTP_HANDLER_THREADS)` (64 threads — bounded deliberately, so
 a burst of requests can't grow the request-handling pool without limit) that serves incoming HTTP
 requests, separate from the scheduled pool used for scenario ticking. `AbstractJsonHandler`
@@ -459,6 +463,17 @@ compact-constructor validation surfaces as a 400 without `RequestMapper` duplica
 scenario capacity), `404` for an unknown scenario id, `405` for the wrong verb, `500` for anything
 else (logged via Log4j2's `log.error`, not a raw stack trace). Coordinates in the JSON API are
 radians, matching the internal representation exactly — no conversion at this boundary.
+`GET /getTypes` and `GET /getFormations` exist so a client (e.g. the `webui/` request console at
+the repo root — a standalone npm project, not part of the Java tree) can build its input form
+without hardcoding the valid values: `/getTypes` serves every
+`ScenarioType` with its category (from `ScenarioType.values()`, so a new enum value is advertised
+automatically), and `/getFormations` serves each formation kind's name and required fields from
+`FormationCatalog` (in `core.server`) — the single registry that *both* this endpoint and
+`RequestMapper`'s formation parsing read, so the advertised catalog and the accepted requests can
+never drift apart. Adding a new formation therefore means: the record in `core.formation`, a
+`FormationPlanner` branch, its fields on `FormationDto`, and one `Descriptor` in
+`FormationCatalog` — never a client change, and never a second copy of the LINE/CIRCLE dispatch
+(don't reintroduce a formation `switch` in `RequestMapper`).
 `createScenario`'s `type` field accepts `"PLANE"`, `"RADAR"`, or `"WEATHER"` (`RequestMapper.
 toScenarioType` maps via `ScenarioType.valueOf`, so a new `ScenarioType` value becomes acceptable
 automatically); its `topicName` field is required for every type (`RequestMapper.toTopicName`
