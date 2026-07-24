@@ -1,0 +1,177 @@
+/* Blue & white theme */
+:root {
+  --blue-900: #0d3b66;
+  --blue-700: #1565c0;
+  --blue-500: #1e88e5;
+  --blue-100: #dcebfa;
+  --blue-50: #eef5fc;
+  --white: #ffffff;
+  --text: #16324f;
+  --muted: #5b7ca8;
+  --error: #c62828;
+  --ok: #1565c0;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  background: var(--blue-50);
+  color: var(--text);
+}
+
+.topbar {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 14px 24px;
+  background: linear-gradient(90deg, var(--blue-900), var(--blue-700));
+  color: var(--white);
+}
+.topbar h1 { margin: 0; font-size: 20px; font-weight: 600; }
+.topbar .subtitle { opacity: 0.8; font-size: 13px; }
+
+.layout {
+  display: grid;
+  grid-template-columns: 220px 1fr 1fr;
+  gap: 16px;
+  padding: 16px 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+@media (max-width: 980px) {
+  .layout { grid-template-columns: 1fr; }
+}
+
+/* Left nav */
+.nav { display: flex; flex-direction: column; gap: 6px; }
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--blue-100);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--text);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.nav-item:hover { border-color: var(--blue-500); }
+.nav-item.active {
+  background: var(--blue-700);
+  border-color: var(--blue-700);
+  color: var(--white);
+}
+.nav-item.active .method { background: var(--white); }
+
+.method {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--blue-100);
+}
+.method-get { color: #1b5e20; }
+.method-post { color: var(--blue-700); }
+
+/* Panels */
+.panel {
+  background: var(--white);
+  border: 1px solid var(--blue-100);
+  border-radius: 10px;
+  padding: 18px 20px;
+  min-height: 340px;
+}
+
+.form-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  font-size: 17px;
+}
+.form-header .path {
+  font-size: 12px;
+  color: var(--blue-700);
+  background: var(--blue-50);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.form-header .description { margin: 8px 0 14px; font-size: 13px; color: var(--muted); }
+
+.field { display: block; margin-bottom: 12px; }
+.field-label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.field input[type="text"],
+.field select {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 14px;
+  border: 1px solid var(--blue-100);
+  border-radius: 6px;
+  background: var(--white);
+  color: var(--text);
+}
+.field input:focus, .field select:focus {
+  outline: 2px solid var(--blue-500);
+  outline-offset: -1px;
+}
+.hint { display: block; margin-top: 3px; font-size: 12px; color: var(--muted); }
+
+.actions { margin-top: 16px; }
+.send {
+  padding: 10px 22px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--white);
+  background: var(--blue-700);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.send:hover { background: var(--blue-500); }
+
+/* Response panel */
+.response pre {
+  margin: 12px 0 0;
+  padding: 12px;
+  background: var(--blue-50);
+  border: 1px solid var(--blue-100);
+  border-radius: 8px;
+  font-size: 13px;
+  overflow: auto;
+  max-height: 60vh;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.placeholder { color: var(--muted); font-size: 14px; }
+
+.response-status { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.badge {
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--white);
+}
+.badge-ok { background: var(--ok); }
+.badge-error { background: var(--error); }
+.ms { color: var(--muted); font-size: 13px; }
+
+.known-ids { margin-top: 16px; }
+.known-ids-title { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.chip {
+  display: inline-block;
+  margin: 0 6px 6px 0;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-family: ui-monospace, monospace;
+  color: var(--blue-900);
+  background: var(--blue-100);
+  border: 1px solid var(--blue-100);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.chip:hover { border-color: var(--blue-500); }
