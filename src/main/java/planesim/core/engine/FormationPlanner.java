@@ -8,6 +8,8 @@ import planesim.core.behavior.StaticBehavior;
 import planesim.core.formation.CircleFormation;
 import planesim.core.formation.LineFormation;
 import planesim.core.formation.OrbitFormation;
+import planesim.core.formation.ScatterFormation;
+import planesim.core.formation.WedgeFormation;
 import planesim.core.geo.GeoMath;
 import planesim.core.geo.Vector2;
 
@@ -44,6 +46,12 @@ public final class FormationPlanner {
         }
         if (config.formation() instanceof OrbitFormation orbit) {
             return buildOrbitFormation(config, orbit, movementStyle, objectFactory, writer);
+        }
+        if (config.formation() instanceof WedgeFormation wedge) {
+            return buildWedgeFormation(config, wedge, movementStyle, objectFactory, writer);
+        }
+        if (config.formation() instanceof ScatterFormation scatter) {
+            return buildScatterFormation(config, scatter, movementStyle, objectFactory, writer);
         }
         throw new IllegalStateException("Unhandled formation type: " + config.formation());
     }
@@ -175,6 +183,97 @@ public final class FormationPlanner {
             FlightBehavior behavior = movementStyle == MovementStyle.STATIC
                     ? new StaticBehavior()
                     : new OrbitBehavior(orbit.radiusMeters(), config.speedMps(), angleRad);
+
+            T object = objectFactory.get();
+            formation.add(new SimulatedObject<>(object, originLatRad, originLonRad, config.altitudeMeters(),
+                    position, velocity, behavior, writer));
+        }
+        return formation;
+    }
+
+    /**
+     * N objects in a flying-V: object 0 at the apex, the rest trailing back-and-outward along two
+     * symmetric arms (alternating side, one {@code spacingMeters} further back each pair). The apex
+     * points along the source-&gt;destination route; each object flies its own parallel copy of that
+     * route ({@link MovementStyle#MOBILE}) so the whole V holds shape and shuttles back and forth
+     * (same trick as {@link #buildLineFormation}), or just holds its point ({@link MovementStyle#STATIC}).
+     */
+    private static <T> List<SimulatedEntity<T>> buildWedgeFormation(GeoScenarioConfig config, WedgeFormation wedge,
+                                                                      MovementStyle movementStyle,
+                                                                      Supplier<T> objectFactory, ObjectWriter<T> writer) {
+        double originLatRad = config.originLatRad();
+        double originLonRad = config.originLonRad();
+
+        Vector2 destLocal = GeoMath.toLocal(wedge.destLatRad(), wedge.destLonRad(), originLatRad, originLonRad);
+        Vector2 routeDirection = destLocal.normalized();
+        Vector2 back = routeDirection.negated();
+        Vector2 perpendicularAxis = routeDirection.perpendicular();
+
+        double halfAngle = wedge.apexAngleRad() / 2.0;
+        Vector2 leftArm = back.scaled(Math.cos(halfAngle)).plus(perpendicularAxis.scaled(Math.sin(halfAngle)));
+        Vector2 rightArm = back.scaled(Math.cos(halfAngle)).minus(perpendicularAxis.scaled(Math.sin(halfAngle)));
+
+        int n = config.objectCount();
+        List<SimulatedEntity<T>> formation = new ArrayList<>(n);
+
+        for (int i = 0; i < n; i++) {
+            // Apex at i=0; then alternate left/right arm, stepping one spacing further back each pair.
+            Vector2 offset = i == 0
+                    ? Vector2.ZERO
+                    : (i % 2 == 1 ? leftArm : rightArm).scaled(((i + 1) / 2) * wedge.spacingMeters());
+
+            Vector2 objectSource = offset;
+            Vector2 objectDestination = destLocal.plus(offset);
+            // A static object never has velocity, not even on its very first published tick.
+            Vector2 velocity = movementStyle == MovementStyle.STATIC
+                    ? Vector2.ZERO
+                    : routeDirection.scaled(config.speedMps());
+
+            FlightBehavior behavior = movementStyle == MovementStyle.STATIC
+                    ? new StaticBehavior()
+                    : new LineBounceBehavior(objectSource, objectDestination);
+
+            T object = objectFactory.get();
+            formation.add(new SimulatedObject<>(object, originLatRad, originLonRad, config.altitudeMeters(),
+                    objectSource, velocity, behavior, writer));
+        }
+        return formation;
+    }
+
+    /**
+     * N objects placed at uniformly-random positions inside a disk of the configured radius, centered
+     * on the origin (uniform over area via {@code r = R * sqrt(u)}, so no clustering toward the
+     * center). Each starts with a random heading; a {@link MovementStyle#MOBILE} object then wanders
+     * independently via random walk (see {@link CircleRandomWalkBehavior}), a {@link MovementStyle#STATIC}
+     * object just stays put.
+     */
+    private static <T> List<SimulatedEntity<T>> buildScatterFormation(GeoScenarioConfig config, ScatterFormation scatter,
+                                                                        MovementStyle movementStyle,
+                                                                        Supplier<T> objectFactory, ObjectWriter<T> writer) {
+        double originLatRad = config.originLatRad();
+        double originLonRad = config.originLonRad();
+
+        int n = config.objectCount();
+        List<SimulatedEntity<T>> formation = new ArrayList<>(n);
+        // Shared RNG is fine: the engine only ever calls into this from a single thread, and
+        // sequential draws from one Random give every object an independent placement/turn sequence.
+        Random random = new Random();
+
+        for (int i = 0; i < n; i++) {
+            double radius = scatter.radiusMeters() * Math.sqrt(random.nextDouble());
+            double placementAngle = 2.0 * Math.PI * random.nextDouble();
+            Vector2 position = new Vector2(radius * Math.cos(placementAngle), radius * Math.sin(placementAngle));
+
+            double headingRad = 2.0 * Math.PI * random.nextDouble();
+            Vector2 direction = new Vector2(Math.cos(headingRad), Math.sin(headingRad));
+
+            // A static object never has velocity, not even on its very first published tick.
+            Vector2 velocity = movementStyle == MovementStyle.STATIC
+                    ? Vector2.ZERO
+                    : direction.scaled(config.speedMps());
+            FlightBehavior behavior = movementStyle == MovementStyle.STATIC
+                    ? new StaticBehavior()
+                    : new CircleRandomWalkBehavior(random);
 
             T object = objectFactory.get();
             formation.add(new SimulatedObject<>(object, originLatRad, originLonRad, config.altitudeMeters(),

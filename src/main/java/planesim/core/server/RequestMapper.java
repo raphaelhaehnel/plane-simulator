@@ -7,6 +7,8 @@ import planesim.core.formation.CircleFormation;
 import planesim.core.formation.FormationSpec;
 import planesim.core.formation.LineFormation;
 import planesim.core.formation.OrbitFormation;
+import planesim.core.formation.ScatterFormation;
+import planesim.core.formation.WedgeFormation;
 import planesim.core.scenario.GeoLiveState;
 import planesim.core.scenario.NonGeoLiveState;
 import planesim.core.scenario.Scenario;
@@ -129,6 +131,15 @@ public final class RequestMapper {
         } else if (spec instanceof OrbitFormation orbit) {
             dto.type = "ORBIT";
             dto.radiusMeters = orbit.radiusMeters();
+        } else if (spec instanceof WedgeFormation wedge) {
+            dto.type = "WEDGE";
+            dto.destLatRad = wedge.destLatRad();
+            dto.destLonRad = wedge.destLonRad();
+            dto.spacingMeters = wedge.spacingMeters();
+            dto.apexAngleRad = wedge.apexAngleRad();
+        } else if (spec instanceof ScatterFormation scatter) {
+            dto.type = "SCATTER";
+            dto.radiusMeters = scatter.radiusMeters();
         }
         return dto;
     }

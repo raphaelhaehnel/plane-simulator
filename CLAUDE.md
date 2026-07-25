@@ -215,7 +215,8 @@ planesim.core                    all logic + the HTTP API — what ships to the 
                                     ObjectWriter(s), ValueGenerator(s), MovementStyle, FormationPlanner,
                                     GeoScenarioConfig, NonGeoScenarioConfig, ScenarioConfig
   planesim.core.behavior           FlightBehavior + LineBounceBehavior/CircleRandomWalkBehavior/OrbitBehavior/StaticBehavior
-  planesim.core.formation          FormationSpec, LineFormation, CircleFormation, OrbitFormation
+  planesim.core.formation          FormationSpec, LineFormation, CircleFormation, OrbitFormation,
+                                    WedgeFormation, ScatterFormation
   planesim.core.geo                Vector2, GeoMath
   planesim.core.scenario           ScenarioType/Status/Category, Geo/NonGeoLiveState (+ Geo/NonGeoFieldReader),
                                     ScenarioEngineFactory(ies), ScenarioLimitExceededException,
@@ -443,7 +444,8 @@ tick, unlike a formation's placement RNG which is drawn once at construction on 
 `ThreadLocalRandom` is the correct/contention-free choice here).
 
 **Formation construction** (geographic objects only). `FormationPlanner.buildFormation` dispatches
-on the sealed `FormationSpec` (`LineFormation` | `CircleFormation` | `OrbitFormation`,
+on the sealed `FormationSpec` (`LineFormation` | `CircleFormation` | `OrbitFormation` |
+`WedgeFormation` | `ScatterFormation`,
 pattern-matched via `instanceof`) to build the initial list of `SimulatedEntity<T>`s (concretely, `SimulatedObject<T>`s)
 with their starting positions, velocities, and behaviors — generic over `T`, so the exact same
 geometry code places planes, radars, or any future geographic object type; only the
@@ -461,6 +463,16 @@ geometry code places planes, radars, or any future geographic object type; only 
   velocity points along the clockwise tangent (`(sin a, -cos a)` at polar angle `a`), matching the
   motion `OrbitBehavior` then continues, so the first published tick is already consistent; a
   `STATIC` object just stays put on the ring.
+- Wedge: a flying-V — object 0 at the apex, the rest trailing back-and-outward along two symmetric
+  arms (alternating side, one `spacingMeters` further back each pair, the arms splayed `apexAngleRad/2`
+  off the reverse-route direction on each side). Like Line, it reuses the parallel-route trick: each
+  object flies its own copy of the source→destination route (shifted by its wedge offset) via
+  `LineBounceBehavior`, so the whole V holds shape and shuttles; a `STATIC` object just holds its
+  point in the V.
+- Scatter: objects at uniformly-random positions inside a disk of the configured radius (uniform
+  over area via `r = radius*sqrt(u)`, so no center clustering), each with a random initial heading,
+  then — if `MOBILE` — wandering independently via the same random walk as Circle
+  (`CircleRandomWalkBehavior`); a `STATIC` object just stays put.
 
 Non-geographic objects (weather) skip `FormationPlanner` entirely — `SimulationEngine.createValueEngine`
 just builds `config.objectCount()` independent `SimulatedValue`s directly, no placement geometry
@@ -554,10 +566,12 @@ would be sub-pixel on any real map projection. Poll-thread UI mutations are wrap
   a Java visibility constraint, not license to make everything public; see "Package structure"
   above for which types are public out of necessity vs. by design.
 - Records (`Vector2`, `StepResult`, `PlaneSnapshot`, `GeoScenarioConfig`, `NonGeoScenarioConfig`,
-  `LineFormation`, `CircleFormation`, `OrbitFormation`, `GeoLiveState`, `NonGeoLiveState`) are used
+  `LineFormation`, `CircleFormation`, `OrbitFormation`, `WedgeFormation`, `ScatterFormation`,
+  `GeoLiveState`, `NonGeoLiveState`) are used
   for immutable
   internal value types; compact constructors validate invariants (e.g. `GeoScenarioConfig`,
-  `NonGeoScenarioConfig`, `LineFormation`, `CircleFormation`/`OrbitFormation` reject negative/non-positive values and
+  `NonGeoScenarioConfig`, `LineFormation`, `CircleFormation`/`OrbitFormation`/`WedgeFormation`/`ScatterFormation`
+  reject negative/non-positive values (`WedgeFormation` also an `apexAngleRad` outside `(0, PI)`) and
   an `objectCount` above `ScenarioConfig.MAX_OBJECT_COUNT`; `GeoScenarioConfig` additionally rejects
   a near-pole `originLatRad`; `NonGeoLiveState` wraps its field map unmodifiable). The HTTP API's wire-format types
   (`planesim.core.server.api.*`) are the one deliberate exception — plain public classes with

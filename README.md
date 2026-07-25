@@ -1,6 +1,6 @@
 # PlanesSimulator API
 
-Simulates objects — planes, radars (arranged in a line or circle formation) and weather (no
+Simulates objects — planes, radars (arranged in a [formation](#formations)) and weather (no
 position at all) — and lets you control multiple simulations ("scenarios") over a simple JSON HTTP
 API. Planes fly their formation; radars are static (placed by the formation but never move);
 weather has no formation or coordinates — it's just periodic readings.
@@ -36,9 +36,8 @@ All bodies are JSON. Coordinates are radians. `speed`/`altitude` are optional (d
 }
 ```
 `type` is `"PLANE"`, `"RADAR"`, or `"WEATHER"`. A radar is static (never moves) — it still needs a
-`formation` to decide where it's placed, but `speed` doesn't do anything for it. For `"type":
-"CIRCLE"` formations, replace `destLatRad`/`destLonRad`/`spacingMeters` with
-`"radiusMeters": 5000`.
+`formation` to decide where it's placed, but `speed` doesn't do anything for it. The `formation`
+object's own fields depend on its `type` — see [Formations](#formations) below.
 
 **Weather is different: it has no coordinates.** Don't send `originLatRad`/`originLonRad`/
 `formation`/`speed`/`altitude` for a `"WEATHER"` scenario — just `type`, `amount` (how many
@@ -48,6 +47,23 @@ independent readings), and `sendInterval`:
 ```
 
 Response: `{ "id": "<uuid>" }`
+
+## Formations
+
+A formation decides **where** the objects start and **how** the moving ones (planes) fly. Radars
+use the same shapes for placement but stay put. Weather has no formation. Pick one as
+`formation.type` and give its fields:
+
+| `type` | Shape | How planes move | Fields |
+|---|---|---|---|
+| `LINE` | A row of objects | Fly straight to a destination, then bounce back — forever | `destLatRad`, `destLonRad`, `spacingMeters` |
+| `CIRCLE` | Spread around a circle | Wander randomly | `radiusMeters` |
+| `ORBIT` | On a ring | Fly around the ring in a circle | `radiusMeters` |
+| `WEDGE` | A "V" (like migrating geese) | Fly the V forward together, then bounce back | `destLatRad`, `destLonRad`, `spacingMeters`, `apexAngleRad` |
+| `SCATTER` | Dropped at random inside a circle | Wander randomly | `radiusMeters` |
+
+All coordinates are radians; distances and `radiusMeters`/`spacingMeters` are meters.
+`apexAngleRad` is the angle of the V at its tip (between `0` and `π`).
 
 ### `GET /getScenarios`
 

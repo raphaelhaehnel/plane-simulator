@@ -4,6 +4,8 @@ import planesim.core.formation.CircleFormation;
 import planesim.core.formation.FormationSpec;
 import planesim.core.formation.LineFormation;
 import planesim.core.formation.OrbitFormation;
+import planesim.core.formation.ScatterFormation;
+import planesim.core.formation.WedgeFormation;
 import planesim.core.server.api.FormationDto;
 
 import java.util.List;
@@ -40,7 +42,16 @@ final class FormationCatalog {
                     FormationCatalog::parseCircle),
             new Descriptor("ORBIT",
                     List.of(new Field("radiusMeters", "Radius (m)")),
-                    FormationCatalog::parseOrbit));
+                    FormationCatalog::parseOrbit),
+            new Descriptor("WEDGE",
+                    List.of(new Field("destLatRad", "Destination latitude (rad)"),
+                            new Field("destLonRad", "Destination longitude (rad)"),
+                            new Field("spacingMeters", "Spacing (m)"),
+                            new Field("apexAngleRad", "Apex angle (rad)")),
+                    FormationCatalog::parseWedge),
+            new Descriptor("SCATTER",
+                    List.of(new Field("radiusMeters", "Radius (m)")),
+                    FormationCatalog::parseScatter));
 
     private FormationCatalog() {
     }
@@ -79,5 +90,20 @@ final class FormationCatalog {
             throw new BadRequestException("ORBIT formation requires radiusMeters");
         }
         return new OrbitFormation(dto.radiusMeters);
+    }
+
+    private static FormationSpec parseWedge(FormationDto dto) {
+        if (dto.destLatRad == null || dto.destLonRad == null || dto.spacingMeters == null
+                || dto.apexAngleRad == null) {
+            throw new BadRequestException("WEDGE formation requires destLatRad, destLonRad, spacingMeters, apexAngleRad");
+        }
+        return new WedgeFormation(dto.destLatRad, dto.destLonRad, dto.spacingMeters, dto.apexAngleRad);
+    }
+
+    private static FormationSpec parseScatter(FormationDto dto) {
+        if (dto.radiusMeters == null) {
+            throw new BadRequestException("SCATTER formation requires radiusMeters");
+        }
+        return new ScatterFormation(dto.radiusMeters);
     }
 }
