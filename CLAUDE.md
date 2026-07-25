@@ -418,9 +418,12 @@ shared), so a behavior can hold private mutable state without synchronization:
 - `LineBounceBehavior` — flies straight to a waypoint, and on reaching/overshooting it in one
   tick, snaps onto it, reverses velocity, and swaps start/target so the object shuttles forever.
 - `CircleRandomWalkBehavior` — each tick rotates the velocity vector by a Gaussian-distributed
-  turn angle (sigma = 45°, i.e. a 90° turn is 2 sigma), which changes heading while preserving
-  speed exactly (rotation doesn't change vector length). Not scaled by `dtSeconds`, so a shorter
-  publish interval means visually more erratic turning.
+  turn angle, which changes heading while preserving speed exactly (rotation doesn't change vector
+  length). The turn's sigma is scaled by `sqrt(dtSeconds)` so the wander *rate* is invariant to the
+  publish interval (heading is a random walk, whose variance accumulates linearly with the number
+  of steps, so `sigma_step ∝ sqrt(dt)` keeps the per-real-second diffusion constant). The `45°`
+  constant is therefore the sigma *per sqrt(second)* — a rotational-diffusion rate — and reproduces
+  the old per-tick behavior at a 1-second publish interval.
 - `OrbitBehavior` — flies a perfect circle around the local-frame origin, clockwise (north-up:
   east → south → west → north), at constant tangential speed (angular speed = speed/radius). It
   tracks its own polar angle and re-derives position/velocity from it each tick rather than

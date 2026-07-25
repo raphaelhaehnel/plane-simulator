@@ -14,14 +14,18 @@ import java.util.Random;
  * direction and preserves speed (rotation never changes vector length), matching "the new
  * velocity will be updated according to this new direction."
  *
- * <p>Note: the turn distribution is applied once per simulation tick, not scaled by dt — so a
- * shorter publish interval means more frequent (and therefore more erratic-looking, over real
- * time) turns. Say the word if you'd rather the turniness be independent of the publish interval;
- * that just means scaling sigma by sqrt(dtSeconds) here.
+ * <p>The turn's standard deviation is scaled by {@code sqrt(dtSeconds)} so the wander rate is
+ * invariant to the publish interval: heading is a random walk, whose variance accumulates linearly
+ * with the number of steps, so over a fixed real time {@code T} the accumulated variance is
+ * {@code (T/dt) * sigma_step^2}; making that independent of {@code dt} requires
+ * {@code sigma_step = sigma_rate * sqrt(dt)}. The 45-degree figure is therefore the standard
+ * deviation <em>per sqrt(second)</em> (a rotational-diffusion rate), and reproduces the old
+ * per-tick behavior at a 1-second publish interval.
  */
 public final class CircleRandomWalkBehavior implements FlightBehavior {
 
-    private static final double TURN_SIGMA_RAD = Math.toRadians(45.0);
+    /** Rotational-diffusion rate: standard deviation of heading change per sqrt(second). */
+    private static final double TURN_SIGMA_RATE_RAD_PER_SQRT_S = Math.toRadians(45.0);
 
     private final Random random;
 
@@ -31,7 +35,8 @@ public final class CircleRandomWalkBehavior implements FlightBehavior {
 
     @Override
     public StepResult step(Vector2 position, Vector2 velocity, double dtSeconds) {
-        double turnAngleRad = random.nextGaussian() * TURN_SIGMA_RAD;
+        double sigma = TURN_SIGMA_RATE_RAD_PER_SQRT_S * Math.sqrt(dtSeconds);
+        double turnAngleRad = random.nextGaussian() * sigma;
         Vector2 newVelocity = velocity.rotated(turnAngleRad);
         Vector2 newPosition = position.plus(newVelocity.scaled(dtSeconds));
         return new StepResult(newPosition, newVelocity);
