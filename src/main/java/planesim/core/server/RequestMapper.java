@@ -3,12 +3,7 @@ package planesim.core.server;
 import planesim.core.engine.GeoScenarioConfig;
 import planesim.core.engine.NonGeoScenarioConfig;
 import planesim.core.engine.ScenarioConfig;
-import planesim.core.formation.CircleFormation;
 import planesim.core.formation.FormationSpec;
-import planesim.core.formation.LineFormation;
-import planesim.core.formation.OrbitFormation;
-import planesim.core.formation.ScatterFormation;
-import planesim.core.formation.WedgeFormation;
 import planesim.core.scenario.GeoLiveState;
 import planesim.core.scenario.NonGeoLiveState;
 import planesim.core.scenario.Scenario;
@@ -30,8 +25,8 @@ import java.util.stream.Collectors;
 /**
  * Converts between the HTTP-facing DTOs and the internal domain model. Validation here is limited
  * to what the domain types can't check themselves (missing/absent fields, unknown formation type);
- * range checks that {@link GeoScenarioConfig}/{@link NonGeoScenarioConfig}/{@link LineFormation}/
- * {@link CircleFormation} already enforce in their compact constructors (e.g. objectCount &gt; 0,
+ * range checks that {@link GeoScenarioConfig}/{@link NonGeoScenarioConfig} and the {@link
+ * FormationSpec} records already enforce in their compact constructors (e.g. objectCount &gt; 0,
  * spacing/radius &gt;= 0) are left to those constructors rather than duplicated here.
  */
 public final class RequestMapper {
@@ -119,29 +114,9 @@ public final class RequestMapper {
     }
 
     private static FormationDto toFormationDto(FormationSpec spec) {
-        FormationDto dto = new FormationDto();
-        if (spec instanceof LineFormation line) {
-            dto.type = "LINE";
-            dto.destLatRad = line.destLatRad();
-            dto.destLonRad = line.destLonRad();
-            dto.spacingMeters = line.spacingMeters();
-        } else if (spec instanceof CircleFormation circle) {
-            dto.type = "CIRCLE";
-            dto.radiusMeters = circle.radiusMeters();
-        } else if (spec instanceof OrbitFormation orbit) {
-            dto.type = "ORBIT";
-            dto.radiusMeters = orbit.radiusMeters();
-        } else if (spec instanceof WedgeFormation wedge) {
-            dto.type = "WEDGE";
-            dto.destLatRad = wedge.destLatRad();
-            dto.destLonRad = wedge.destLonRad();
-            dto.spacingMeters = wedge.spacingMeters();
-            dto.apexAngleRad = wedge.apexAngleRad();
-        } else if (spec instanceof ScatterFormation scatter) {
-            dto.type = "SCATTER";
-            dto.radiusMeters = scatter.radiusMeters();
-        }
-        return dto;
+        // Both directions of the formation wire round-trip live in FormationCatalog, so a new
+        // formation is fully handled by adding one Descriptor there — no echo branch to add here.
+        return FormationCatalog.toDto(spec);
     }
 
     private static GeoStateDto toGeoDto(GeoLiveState state) {

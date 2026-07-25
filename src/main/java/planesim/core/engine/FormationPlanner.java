@@ -57,6 +57,33 @@ public final class FormationPlanner {
     }
 
     /**
+     * The initial velocity a placed object publishes on its very first tick: a {@link
+     * MovementStyle#STATIC} object never has velocity (not even before its {@link StaticBehavior}
+     * has run once), a {@link MovementStyle#MOBILE} object keeps the formation's placement velocity.
+     * A {@code switch} expression with no {@code default}, so adding a {@link MovementStyle} constant
+     * is a compile error here rather than being silently treated as {@code MOBILE}.
+     */
+    private static Vector2 initialVelocity(MovementStyle movementStyle, Vector2 mobileVelocity) {
+        return switch (movementStyle) {
+            case STATIC -> Vector2.ZERO;
+            case MOBILE -> mobileVelocity;
+        };
+    }
+
+    /**
+     * The per-tick behavior a placed object gets: a {@link MovementStyle#STATIC} object never moves
+     * ({@link StaticBehavior}, regardless of the formation's natural motion), a {@link
+     * MovementStyle#MOBILE} object flies the formation's own behavior. Exhaustive {@code switch}
+     * (no {@code default}) for the same compile-time safety as {@link #initialVelocity}.
+     */
+    private static FlightBehavior behaviorFor(MovementStyle movementStyle, FlightBehavior mobileBehavior) {
+        return switch (movementStyle) {
+            case STATIC -> new StaticBehavior();
+            case MOBILE -> mobileBehavior;
+        };
+    }
+
+    /**
      * N objects placed along parallel lines between source and destination, evenly spaced along
      * the axis perpendicular to the route, centered on the source/destination centerline. Each
      * object gets its own source and destination point — both the config's source and destination
@@ -86,14 +113,9 @@ public final class FormationPlanner {
 
             Vector2 objectSource = sourceLocal.plus(offset);
             Vector2 objectDestination = destLocal.plus(offset);
-            // A static object never has velocity, not even on its very first published tick.
-            Vector2 velocity = movementStyle == MovementStyle.STATIC
-                    ? Vector2.ZERO
-                    : routeDirection.scaled(config.speedMps());
 
-            FlightBehavior behavior = movementStyle == MovementStyle.STATIC
-                    ? new StaticBehavior()
-                    : new LineBounceBehavior(objectSource, objectDestination);
+            Vector2 velocity = initialVelocity(movementStyle, routeDirection.scaled(config.speedMps()));
+            FlightBehavior behavior = behaviorFor(movementStyle, new LineBounceBehavior(objectSource, objectDestination));
 
             T object = objectFactory.get();
             formation.add(new SimulatedObject<>(object, originLatRad, originLonRad, config.altitudeMeters(),
@@ -137,13 +159,8 @@ public final class FormationPlanner {
                 position = direction.scaled(circle.radiusMeters());
             }
 
-            // A static object never has velocity, not even on its very first published tick.
-            Vector2 velocity = movementStyle == MovementStyle.STATIC
-                    ? Vector2.ZERO
-                    : direction.scaled(config.speedMps());
-            FlightBehavior behavior = movementStyle == MovementStyle.STATIC
-                    ? new StaticBehavior()
-                    : new CircleRandomWalkBehavior(random);
+            Vector2 velocity = initialVelocity(movementStyle, direction.scaled(config.speedMps()));
+            FlightBehavior behavior = behaviorFor(movementStyle, new CircleRandomWalkBehavior(random));
 
             T object = objectFactory.get();
             formation.add(new SimulatedObject<>(object, originLatRad, originLonRad, config.altitudeMeters(),
@@ -176,13 +193,9 @@ public final class FormationPlanner {
             // Clockwise tangent at angle a is (sin a, -cos a) — see OrbitBehavior.
             Vector2 tangent = new Vector2(Math.sin(angleRad), -Math.cos(angleRad));
 
-            // A static object never has velocity, not even on its very first published tick.
-            Vector2 velocity = movementStyle == MovementStyle.STATIC
-                    ? Vector2.ZERO
-                    : tangent.scaled(config.speedMps());
-            FlightBehavior behavior = movementStyle == MovementStyle.STATIC
-                    ? new StaticBehavior()
-                    : new OrbitBehavior(orbit.radiusMeters(), config.speedMps(), angleRad);
+            Vector2 velocity = initialVelocity(movementStyle, tangent.scaled(config.speedMps()));
+            FlightBehavior behavior = behaviorFor(movementStyle,
+                    new OrbitBehavior(orbit.radiusMeters(), config.speedMps(), angleRad));
 
             T object = objectFactory.get();
             formation.add(new SimulatedObject<>(object, originLatRad, originLonRad, config.altitudeMeters(),
@@ -224,14 +237,9 @@ public final class FormationPlanner {
 
             Vector2 objectSource = offset;
             Vector2 objectDestination = destLocal.plus(offset);
-            // A static object never has velocity, not even on its very first published tick.
-            Vector2 velocity = movementStyle == MovementStyle.STATIC
-                    ? Vector2.ZERO
-                    : routeDirection.scaled(config.speedMps());
 
-            FlightBehavior behavior = movementStyle == MovementStyle.STATIC
-                    ? new StaticBehavior()
-                    : new LineBounceBehavior(objectSource, objectDestination);
+            Vector2 velocity = initialVelocity(movementStyle, routeDirection.scaled(config.speedMps()));
+            FlightBehavior behavior = behaviorFor(movementStyle, new LineBounceBehavior(objectSource, objectDestination));
 
             T object = objectFactory.get();
             formation.add(new SimulatedObject<>(object, originLatRad, originLonRad, config.altitudeMeters(),
@@ -267,13 +275,8 @@ public final class FormationPlanner {
             double headingRad = 2.0 * Math.PI * random.nextDouble();
             Vector2 direction = new Vector2(Math.cos(headingRad), Math.sin(headingRad));
 
-            // A static object never has velocity, not even on its very first published tick.
-            Vector2 velocity = movementStyle == MovementStyle.STATIC
-                    ? Vector2.ZERO
-                    : direction.scaled(config.speedMps());
-            FlightBehavior behavior = movementStyle == MovementStyle.STATIC
-                    ? new StaticBehavior()
-                    : new CircleRandomWalkBehavior(random);
+            Vector2 velocity = initialVelocity(movementStyle, direction.scaled(config.speedMps()));
+            FlightBehavior behavior = behaviorFor(movementStyle, new CircleRandomWalkBehavior(random));
 
             T object = objectFactory.get();
             formation.add(new SimulatedObject<>(object, originLatRad, originLonRad, config.altitudeMeters(),

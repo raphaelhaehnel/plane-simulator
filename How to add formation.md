@@ -18,12 +18,13 @@ throughout — it was added exactly this way.
 | `SimulationEngine`, `SimulatedObject` | Only see a `FlightBehavior`, never a formation |
 | `GeoScenarioConfig` | Holds any `FormationSpec` — the sealed interface, not a concrete type |
 | `ScenarioManager` / `ScenarioPublisher` / `ScenarioEngineFactories` | Formation-agnostic; they work per object *type*, not per formation |
+| `RequestMapper` | Parses and echoes formations by delegating to `FormationCatalog` — no per-formation branch |
 | The webui | Builds its formation dropdown + fields from `GET /getFormations` at load time |
 | The Swing view | Renders live positions; it neither knows nor cares what pattern produced them |
 
-A new formation is automatically advertised by `GET /getFormations` and accepted by
-`POST /createScenario` once it's in `FormationCatalog` (step 5) — the endpoint and the request
-parsing read the *same* registry, so they can never drift apart.
+A new formation is automatically advertised by `GET /getFormations`, accepted by
+`POST /createScenario`, and echoed by `GET /getScenarios` once it's in `FormationCatalog` (step 5) —
+all three read the *same* registry, so they can never drift apart.
 
 ---
 
@@ -114,13 +115,16 @@ public Double radiusMeters;
 
 ### 5. The registry — one `Descriptor` in `planesim.core.server.FormationCatalog`
 
-This single entry both advertises the formation on `GET /getFormations` (name + fields, which is
-what the webui builds its form from) and parses/validates incoming requests:
+This single entry does **everything wire-facing** for the formation: it advertises it on
+`GET /getFormations` (name + fields, which is what the webui builds its form from), **parses** an
+incoming request (`FormationDto → FormationSpec`), and **serializes** it back out on
+`GET /getScenarios` (`FormationSpec → FormationDto`). Both directions of the round-trip live here,
+so there's no separate echo branch to add anywhere else:
 
 ```java
-new Descriptor("ORBIT",
+new Descriptor("ORBIT", OrbitFormation.class,
         List.of(new Field("radiusMeters", "Radius (m)")),
-        FormationCatalog::parseOrbit));
+        FormationCatalog::parseOrbit, FormationCatalog::serializeOrbit));
 
 private static FormationSpec parseOrbit(FormationDto dto) {
     if (dto.radiusMeters == null) {
@@ -128,25 +132,24 @@ private static FormationSpec parseOrbit(FormationDto dto) {
     }
     return new OrbitFormation(dto.radiusMeters);
 }
-```
 
-The parser only checks *presence* (missing field → 400 with a clear message); *range* checks live
-in the record's compact constructor (step 1) — don't duplicate them here.
-
-**Never** reintroduce a formation `switch`/`if` in `RequestMapper`'s request parsing — the whole
-point of `FormationCatalog` is that the advertised catalog and the accepted requests come from
-one place.
-
-### 6. The echo — a branch in `RequestMapper.toFormationDto`
-
-The one place that serializes a `FormationSpec` back out on `GET /getScenarios`:
-
-```java
-} else if (spec instanceof OrbitFormation orbit) {
+private static FormationDto serializeOrbit(FormationSpec spec) {
+    OrbitFormation orbit = (OrbitFormation) spec;   // safe: matched by Descriptor.specType
+    FormationDto dto = new FormationDto();
     dto.type = "ORBIT";
     dto.radiusMeters = orbit.radiusMeters();
+    return dto;
 }
 ```
+
+The `parser` only checks *presence* (missing field → 400 with a clear message); *range* checks live
+in the record's compact constructor (step 1) — don't duplicate them here. The `specType` is how
+`toDto` finds the right descriptor for a given spec, so the `serializer`'s cast is always safe.
+
+**Never** reintroduce a formation `switch`/`if` in `RequestMapper` — neither for request parsing
+nor for the echo. The whole point of `FormationCatalog` is that the advertised catalog, the
+accepted requests, **and** the echoed responses all come from one place. `RequestMapper.toFormationDto`
+is just a one-line call to `FormationCatalog.toDto(spec)`.
 
 ---
 
@@ -188,6 +191,5 @@ automatically in its dropdown; the Swing view (`mvn exec:java
 | 2. Behavior (only if needed) | `core.behavior` | `OrbitBehavior` |
 | 3. Placement branch | `core.engine.FormationPlanner` | `buildOrbitFormation` |
 | 4. Wire fields | `core.server.api.FormationDto` | none new (reuses `radiusMeters`) |
-| 5. Catalog descriptor + parser | `core.server.FormationCatalog` | `"ORBIT"` + `parseOrbit` |
-| 6. Echo branch | `core.server.RequestMapper.toFormationDto` | sets `type`/`radiusMeters` |
-| webui / Swing view / `ScenarioManager` / engine | — | never touched |
+| 5. Catalog descriptor + parser + serializer | `core.server.FormationCatalog` | `"ORBIT"` + `parseOrbit` + `serializeOrbit` |
+| webui / Swing view / `RequestMapper` / `ScenarioManager` / engine | — | never touched |

@@ -170,8 +170,10 @@ question that matters is: does the new type have coordinates (geographic) or not
 3. Decide its `MovementStyle`: `MOBILE` reuses the existing per-formation behaviors
    (`LineBounceBehavior`/`CircleRandomWalkBehavior`, in `planesim.core.behavior`); `STATIC` reuses
    `StaticBehavior` regardless of formation shape. If neither fits, add a new `FlightBehavior`
-   implementation and wire it into `planesim.core.engine.FormationPlanner`'s
-   `movementStyle == ...` branches.
+   implementation and have each `FormationPlanner` builder pass it as the *mobile* behavior. The
+   `MovementStyle` → behavior/velocity choice itself lives in two small exhaustive-`switch` helpers
+   (`FormationPlanner.behaviorFor`/`initialVelocity`) — a new `MovementStyle` enum value is a
+   *compile error* there until handled, rather than being silently treated as `MOBILE`.
 4. Add `ScenarioType.YOUR_TYPE(ScenarioCategory.GEOGRAPHIC)` and one constant to
    `planesim.core.scenario.ScenarioEngineFactories` (+ its `DEFAULTS` map) that calls
    `SimulationEngine.create(...)` with your `ObjectWriter` and `MovementStyle`.
@@ -500,12 +502,16 @@ the repo root — a standalone npm project, not part of the Java tree) can build
 without hardcoding the valid values: `/getTypes` serves every
 `ScenarioType` with its category (from `ScenarioType.values()`, so a new enum value is advertised
 automatically), and `/getFormations` serves each formation kind's name and required fields from
-`FormationCatalog` (in `core.server`) — the single registry that *both* this endpoint and
-`RequestMapper`'s formation parsing read, so the advertised catalog and the accepted requests can
-never drift apart. Adding a new formation therefore means: the record in `core.formation`, a
-`FormationPlanner` branch, its fields on `FormationDto`, and one `Descriptor` in
-`FormationCatalog` — never a client change, and never a second copy of the LINE/CIRCLE dispatch
-(don't reintroduce a formation `switch` in `RequestMapper`).
+`FormationCatalog` (in `core.server`) — the single registry that this endpoint, `RequestMapper`'s
+formation parsing (request → `FormationSpec`), *and* `RequestMapper`'s formation echoing
+(`FormationSpec` → DTO on `GET /getScenarios`) all read, so the advertised catalog, the accepted
+requests, and the echoed responses can never drift apart. Each `Descriptor` carries both directions
+of the round-trip — a `parser` and a `serializer` (matched to a spec by its `specType`) — so
+`RequestMapper.toFormationDto` is just a one-line `FormationCatalog.toDto(spec)` call. Adding a new
+formation therefore means: the record in `core.formation`, a `FormationPlanner` branch, its fields
+on `FormationDto`, and one `Descriptor` in `FormationCatalog` (name + fields + parser + serializer)
+— never a client change, and never a formation `switch`/`instanceof` chain in `RequestMapper` in
+*either* direction.
 `createScenario`'s `type` field accepts `"PLANE"`, `"RADAR"`, or `"WEATHER"` (`RequestMapper.
 toScenarioType` maps via `ScenarioType.valueOf`, so a new `ScenarioType` value becomes acceptable
 automatically); its `topicName` field is required for every type (`RequestMapper.toTopicName`
